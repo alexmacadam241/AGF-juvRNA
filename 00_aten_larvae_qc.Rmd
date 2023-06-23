@@ -110,5 +110,3 @@ system("mkdir -p rsem")
 ```{r}
 system("rsem-prepare-reference --gtf raw_data/aten_0.11.maker_post_001.genes.gff.gz --bowtie2 raw_data/aten_final_0.11.fasta rsem/aten_ref")
 ```
-
-
