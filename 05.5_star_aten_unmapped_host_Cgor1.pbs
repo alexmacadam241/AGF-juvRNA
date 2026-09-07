@@ -1,0 +1,51 @@
+#!/bin/bash
+#PBS -V
+#PBS -m ae
+#PBS -N 05.5_star_aten_unmapped_host_Cgor1
+#PBS -M alexander.macadam@my.jcu.edu.au
+#PBS -l walltime=24:00:00
+#PBS -l select=1:ncpus=16:mem=50gb
+#PBS -o 05.5_star_aten_unmapped_host_Cgor1.log
+#PBS -e 05.5_star_aten_unmapped_host_Cgor1.err
+
+cd $PBS_O_WORKDIR
+
+# Add this to all of your scripts
+shopt -s expand_aliases
+source /etc/profile.d/modules.sh
+
+#Aligning reads using STAR is a two step process: 1. Create a genome index 2. Map reads to the genome
+#STAR tutorial https://hbctraining.github.io/Intro-to-rnaseq-hpc-O2/lessons/03_alignment.html 
+#RNA=seq tutorial https://biocorecrg.github.io/RNAseq_course_2019/alnpractical.html
+#another very useful tutorial: https://sydney-informatics-hub.github.io/training-RNAseq/03-MapReads/index.html
+
+######I map porites reads that did no map to the host, to UQ Cladocopium goreaui USING LESS STRICT MAPPING PARAMETERS
+
+#load module
+module load star/2.7.9a
+
+# Setting input directory
+INPUT_DIR=/home/jc828813/RNAseq/results/aten_juveniles/host/mapping/SS
+
+#setting up variables
+echo "pbsdataset is $PBSDATASET"
+PREFIX=$(basename $PBSDATASET | cut -d "_" -f 1,2,3) 
+echo "for this job data is $PBSDATASET and the prefix is $PREFIX"
+
+#STAR --help for help
+#STAR does not utilize library strandedness information for mapping (https://github.com/alexdobin/STAR/issues/818). 
+#For paired-end reads, use comma separated list for read1, followed by space, followed by comma separated list for read2, e.g.: --readFilesIn s1read1.fq,s2read1.fq,s3read1.fq s1read2.fq,s2read2.fq,s3read2.fq#--readFilesCommand zcat  because fastq files are zipped
+#--quantMode GeneCounts used to count number reads per gene while mapping; The counts coincide with those produced by htseq-count with default parameters.
+#--outReadsUnmapped Fastx - will generate a fastq file of reads that STAR failed to map
+#--outSAMtype: STAR can output alignments directly in binary BAM format, thus saving time on converting SAM files to BAM. It can also sort BAM files by coordinates, which is required by many downstream applications. --outSAMtype BAM Unsorted SortedByCoordinate: output both unsorted and sorted files.
+#--outFilterScoreMinOverLread and --outFilterMatchNminOverLread have default 0.66 - I reduce it to 0.55 to increase mapping rate
+
+STAR --runThreadN 16 \
+	--quantMode GeneCounts \
+	--outSAMtype BAM Unsorted SortedByCoordinate \
+	--outReadsUnmapped Fastx \
+	--outFilterScoreMinOverLread 0.65 \
+	--outFilterMatchNminOverLread 0.65 \
+	--outFileNamePrefix /home/jc828813/RNAseq/results/aten_juveniles/symbiont/Cgor1/mapping/${PREFIX}_unmapped_host_mapped_to_Cgor1_ \
+	--genomeDir /home/jc828813/RNAseq/genome_indices/Cgor1 \
+	--readFilesIn $INPUT_DIR/${PREFIX}_aten_juveniles_Unmapped.out.mate1 $INPUT_DIR/${PREFIX}_aten_juveniles_Unmapped.out.mate2

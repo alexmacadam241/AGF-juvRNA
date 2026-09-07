@@ -1,0 +1,169 @@
+---
+title: "8.1_aten_juv_KOG"
+output: html_document
+date: "2024-08-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#####
+KOG
+```{r}
+library(KOGMWU)
+library(tidyverse)
+
+#load gene2kog data
+gene2kog_aten<- read_tsv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/eggNOG/A.ten/Atenuis_gene2kogClass.txt", col_names = F) |> na.omit() 
+gene2kog_aten<- gene2kog_aten |> mutate(
+  V1 = factor(X1),
+  V2 = factor(X2)
+) |>
+  dplyr::select(V1, V2) |> as.data.frame()
+
+gene2kog_dtre<- read_tsv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/eggNOG/A.ten/Dtrenchii_gene2kogClass.tab", col_names = F) |> na.omit() 
+gene2kog_dtre<- gene2kog_dtre |> mutate(
+  V1 = factor(X1),
+  V2 = factor(X2)
+) |>
+  dplyr::select(V1, V2) |> as.data.frame()
+
+gene2kog_cgor<- read_tsv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/eggNOG/A.ten/Cgoreaui_gene2kogClass.tab", col_names = F) |> na.omit() 
+gene2kog_cgor<- gene2kog_cgor |> mutate(
+  V1 = factor(X1),
+  V2 = factor(X2)
+) |>
+  dplyr::select(V1, V2) |> as.data.frame()
+gene2kog_cgor$V1 <- gsub("model", "TU", gene2kog_cgor$V1)
+```
+
+```{r}
+#load DEG data
+Host_D1sig<- read_csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/KOG/Host_D1sig.csv")
+Host_D1sig<- Host_D1sig |> dplyr::select(gene, lfc) |> mutate(gene = factor(gene)) |> as.data.frame()
+
+Host_SSsig<- read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/KOG/Host_SSsig.csv")
+Host_SSsig<- Host_SSsig |> dplyr::select(gene, lfc) |> mutate(gene = factor(gene)) |> as.data.frame()
+
+Host_Wildsig<- read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/KOG/Host_Wildsig.csv")
+Host_Wildsig<- Host_Wildsig |> dplyr::select(gene, lfc) |> mutate(gene = factor(gene)) |> as.data.frame()
+
+Sym_D1sig<- read_csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/KOG/Symb_D1sig.csv")
+Sym_D1sig<- Sym_D1sig |> dplyr::select(gene, lfc) |> mutate(gene = factor(gene)) |> as.data.frame()
+
+Sym_SSsig<- read_csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/KOG/Symb_SSsig.csv")
+Sym_SSsig<- Sym_SSsig |> dplyr::select(gene, lfc) |> mutate(gene = factor(gene)) |> as.data.frame()
+```
+
+```{r}
+# Analyzing D1 coral response to heat stress:
+D1.KOG=kog.mwu(Host_D1sig,gene2kog_aten)
+D1.KOG
+
+# Analyzing D1 coral response to heat stress:
+SS.KOG=kog.mwu(Host_SSsig,gene2kog_aten) 
+SS.KOG
+
+# Analyzing D1 coral response to heat stress:
+Wild.KOG=kog.mwu(Host_Wildsig,gene2kog_aten) 
+Wild.KOG
+
+# Analyzing D1 symbiont response to heat stress:
+Dtre.KOG=kog.mwu(Sym_D1sig,gene2kog_dtre)
+Dtre.KOG
+
+# Analyzing D1 coral response to heat stress:
+Cgor.KOG=kog.mwu(Sym_SSsig,gene2kog_cgor)
+Cgor.KOG
+```
+
+```{r}
+# compiling a table of delta-ranks to compare these results:
+ktable=makeDeltaRanksTable(list("Host D1"=D1.KOG,"Host SS"=SS.KOG,"Host Wild"=Wild.KOG,"Sym D1"=Dtre.KOG,"Sym SS"=Cgor.KOG))
+
+# Making a heatmap with hierarchical clustering trees:
+pheatmap(as.matrix(ktable),clustering_distance_cols="correlation")
+
+# exploring correlations between datasets
+pairs(ktable, lower.panel = panel.smooth, upper.panel = panel.cor)
+# p-values of these correlations in the upper panel:
+pairs(ktable, lower.panel = panel.smooth, upper.panel = panel.cor.pval)
+
+# plotting individual delta-rank correlations:
+corrPlot(x="Host D1",y="Host SS",ktable)
+corrPlot(x="Host D1",y="Host Wild",ktable)
+corrPlot(x="Host SS",y="Host Wild",ktable)
+corrPlot(x="Sym D1",y="Sym SS",ktable)
+corrPlot(x="Host SS",y="Sym SS",ktable)
+```
+
+#######
+Host Ambient samples between the symbiont treatments
+```{r}
+#load DEG data
+AmbD1.vs.AmbSS<- read_csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/KOG/AmbD1.vs.AmbSS.csv")
+AmbD1.vs.AmbSS<- AmbD1.vs.AmbSS |> dplyr::select(gene, lfc) |> mutate(gene = factor(gene)) |> as.data.frame()
+
+AmbD1.vs.AmbWild<- read_csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/KOG/AmbD1.vs.AmbWild.csv")
+AmbD1.vs.AmbWild<- AmbD1.vs.AmbWild |> dplyr::select(gene, lfc) |> mutate(gene = factor(gene)) |> as.data.frame()
+
+AmbSS.vs.AmbWild<- read_csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/KOG/AmbSS.vs.AmbWild.csv")
+AmbSS.vs.AmbWild<- AmbSS.vs.AmbWild |> dplyr::select(gene, lfc) |> mutate(gene = factor(gene)) |> as.data.frame()
+
+HotD1.vs.HotSS<- read_csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/KOG/HotD1.vs.HotSS.csv")
+HotD1.vs.HotSS<- HotD1.vs.HotSS |> dplyr::select(gene, lfc) |> mutate(gene = factor(gene)) |> as.data.frame()
+
+HotD1.vs.HotWild<- read_csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/KOG/HotD1.vs.HotWild.csv")
+HotD1.vs.HotWild<- HotD1.vs.HotWild |> dplyr::select(gene, lfc) |> mutate(gene = factor(gene)) |> as.data.frame()
+
+HotSS.vs.HotWild<- read_csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/KOG/HotSS.vs.HotWild.csv")
+HotSS.vs.HotWild<- HotSS.vs.HotWild |> dplyr::select(gene, lfc) |> mutate(gene = factor(gene)) |> as.data.frame()
+```
+
+```{r}
+# Analyzing D1 coral response to heat stress:
+AmbD1.vs.AmbSS.KOG=kog.mwu(AmbD1.vs.AmbSS,gene2kog_aten)
+AmbD1.vs.AmbSS.KOG
+
+AmbD1.vs.AmbWild.KOG=kog.mwu(AmbD1.vs.AmbWild,gene2kog_aten)
+AmbD1.vs.AmbWild.KOG
+
+AmbSS.vs.AmbWild.KOG=kog.mwu(AmbSS.vs.AmbWild,gene2kog_aten)
+AmbSS.vs.AmbWild.KOG
+
+HotD1.vs.HotSS.KOG=kog.mwu(HotD1.vs.HotSS,gene2kog_aten)
+HotD1.vs.HotSS.KOG
+
+HotD1.vs.HotWild.KOG=kog.mwu(HotD1.vs.HotWild,gene2kog_aten)
+HotD1.vs.HotWild.KOG
+
+HotSS.vs.HotWild.KOG=kog.mwu(HotSS.vs.HotWild,gene2kog_aten)
+HotSS.vs.HotWild.KOG
+```
+
+```{r}
+# compiling a table of delta-ranks to compare these results:
+ktable=makeDeltaRanksTable(list("AmbD1 vs AmbSS"=AmbD1.vs.AmbSS.KOG,"AmbD1 vs AmbWild"=AmbD1.vs.AmbWild.KOG,"AmbSS vs AmbWild"=AmbSS.vs.AmbWild.KOG,"HotD1 vs HotSS"=HotD1.vs.HotSS.KOG,"HotD1 vs HotWild"=HotD1.vs.HotWild.KOG, "HotSS vs HotWild"=HotSS.vs.HotWild.KOG))
+
+# Making a heatmap with hierarchical clustering trees:
+pheatmap(as.matrix(ktable),clustering_distance_cols="correlation")
+
+# exploring correlations between datasets
+pairs(ktable, lower.panel = panel.smooth, upper.panel = panel.cor)
+# p-values of these correlations in the upper panel:
+pairs(ktable, lower.panel = panel.smooth, upper.panel = panel.cor.pval)
+
+# plotting individual delta-rank correlations:
+corrPlot(x="AmbD1 vs AmbSS",y="AmbD1 vs AmbWild",ktable)
+corrPlot(x="AmbD1 vs AmbSS",y="AmbSS vs AmbWild",ktable)
+corrPlot(x="AmbD1 vs AmbWild",y="AmbSS vs AmbWild",ktable)
+corrPlot(x="HotD1 vs HotSS",y="HotD1 vs HotWild",ktable)
+corrPlot(x="HotD1 vs HotSS",y="HotSS vs HotWild",ktable)
+corrPlot(x="AmbD1 vs AmbWild",y="AmbSS vs AmbWild",ktable)
+
+corrPlot(x="AmbD1 vs AmbSS",y="HotD1 vs HotSS",ktable)
+corrPlot(x="AmbD1 vs AmbWild",y="HotD1 vs HotWild",ktable)
+corrPlot(x="AmbSS vs AmbWild",y="HotSS vs HotWild",ktable)
+```
+

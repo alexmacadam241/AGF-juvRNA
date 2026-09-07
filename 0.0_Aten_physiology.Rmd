@@ -1,0 +1,353 @@
+---
+title: "Untitled"
+output: html_document
+date: "2024-08-27"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Libraries
+library(tidyr)
+library(dplyr)
+library(stringr)  # for replacing strings
+library(wesanderson)
+library(ggplot2)
+#install.packages('GGally')
+library(GGally)
+library(gridExtra)
+library(reshape2)
+library(cartography)  # for custom palette
+#library(pdp)  # multigrid plots
+library(cowplot)  # for nuanced multipanel plots of asymmetrical panels
+library(ggrepel)  # repelling plot labels
+library(ggpubr)
+library(ggthemes)
+```
+
+```{r}
+survival_all<- read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Juvenile physiology data data/Yr1_Aten_Juvenile_family.csv")
+survival_sym<- read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Juvenile physiology data data/Yr1_Aten_Juvenile_sym_family.csv")
+
+survival<- read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Juvenile physiology data data/Juvenile survival data.csv")
+size<- read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Juvenile physiology data data/final_size.csv")
+growth<- read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Juvenile physiology data data/growth.csv")
+col<- read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Juvenile physiology data data/final_colour.csv")
+col.change<- read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Juvenile physiology data data/colour_change.csv")
+yii<- read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Juvenile physiology data data/final_yii.csv")
+yii.change<-read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Juvenile physiology data data/yii_change.csv")
+```
+
+```{r}
+#https://rpubs.com/Koundy/71792
+theme_Publication <- function(base_size=14, base_family="helvetica") {
+      library(grid)
+      library(ggthemes)
+      (theme_foundation(base_size=base_size, base_family=base_family)
+       + theme(plot.title = element_text(face = "bold",
+                                         size = rel(1.2), hjust = 0.5),
+               text = element_text(),
+               panel.background = element_rect(colour = NA),
+               plot.background = element_rect(colour = NA),
+               panel.border = element_rect(colour = NA),
+               axis.title = element_text(face = "bold",size = rel(1)),
+               axis.title.y = element_text(angle=90,vjust =2),
+               axis.title.x = element_text(vjust = -0.2),
+               axis.text = element_text(), 
+               axis.line = element_line(colour="black"),
+               axis.ticks = element_line(),
+               panel.grid.major = element_line(colour="#f0f0f0"),
+               panel.grid.minor = element_blank(),
+               legend.key = element_rect(colour = NA),
+               legend.position = "bottom",
+               legend.direction = "horizontal",
+               legend.key.size= unit(0.2, "cm"),
+               legend.margin = unit(0, "cm"),
+               legend.title = element_text(face="italic"),
+               plot.margin=unit(c(10,5,5,5),"mm"),
+               strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+               strip.text = element_text(face="bold")
+          ))
+      
+}
+
+scale_fill_Publication <- function(...){
+      library(scales)
+      discrete_scale("fill","Publication",manual_pal(values = c("#386cb0","#fdb462","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")), ...)
+
+}
+
+scale_colour_Publication <- function(...){
+      library(scales)
+      discrete_scale("colour","Publication",manual_pal(values = c("#386cb0","#fdb462","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")), ...)
+
+}
+```
+
+```{r}
+pd <- position_dodge(width=0.2)
+pal <- wes_palette("Zissou1", 5, type = "discrete")
+scalesize <- function(x) sprintf("%.1f", x)
+```
+
+```{r, warning = FALSE}
+#plot survival all
+survival_all_plot<- survival_all %>%
+  ggplot(aes(x=reorder(Family, desc(mean)), y=mean))+
+  #geom_hline(yintercept=filter(survival_combined, Population.location=="Central x Central")$mean, color='gray', lty='dashed')+
+#  geom_hline(yintercept=0, color='black', size = 0.5)+
+  geom_pointrange(aes(ymin=mean-se, ymax=mean+se, color=Temp), position=position_dodge(width=0.8))+
+#  geom_text(aes(label=crosstype2, y=-0.5), size=3, fontface = "bold", angle=90, position=position_dodge(width=0.8), vjust=0.5, hjust=1) +
+  scale_y_continuous(limits=c(50,100), breaks=seq(50,100,10), labels = scalesize)+
+  scale_color_manual(values=pal[c(1,5)]) +
+  #facet_wrap(~Treatment) +
+  scale_shape_manual(values=c(15, 19, 17, 18)) +
+  labs(x='Family', y="Survival (%)")+
+  theme_Publication() +
+  theme(legend.key.height = unit(0.3, "cm"),
+        legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(0,0,0,0),
+        plot.margin = margin(rep(0.5,4)),
+        legend.position="right",
+        legend.direction = "vertical",
+        axis.text.x = element_text(angle = 90),
+        axis.text.y = element_text(angle = 90)
+        ) #+
+  #scale_x_discrete(limits = c("J8xD13", "J8xP5", "J8xJ2", "J8xJ3", "J8xD1", "J8xD6"))
+survival_all_plot
+```
+
+```{r, warning = FALSE}
+#plot survival
+survival_sym_plot<- survival_sym %>%
+  ggplot(aes(x=reorder(Family, desc(mean)), y=mean, shape=Treatment, group= reorder(Treatment, desc(mean))))+
+  #geom_hline(yintercept=filter(survival_combined, Population.location=="Central x Central")$mean, color='gray', lty='dashed')+
+#  geom_hline(yintercept=0, color='black', size = 0.5)+
+  geom_pointrange(aes(ymin=mean-se, ymax=mean+se, color=Temp), position=position_dodge(width=0.8))+
+#  geom_text(aes(label=crosstype2, y=-0.5), size=3, fontface = "bold", angle=90, position=position_dodge(width=0.8), vjust=0.5, hjust=1) +
+  scale_y_continuous(limits=c(50,100), breaks=seq(50,100,10), labels = scalesize)+
+  scale_color_manual(values=pal[c(1,5)]) +
+  facet_wrap(~Treatment, nrow = 3) +
+  scale_shape_manual(values=c(15, 19, 17, 18)) +
+  labs(x='Family', y="Survival (%)")+
+  theme_Publication() +
+  theme(legend.key.height = unit(0.3, "cm"),
+        legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(0,0,0,0),
+        plot.margin = margin(rep(0.5,4)),
+        legend.position="right",
+        legend.direction = "vertical",
+        axis.text.x = element_text(angle = 90),
+        axis.text.y = element_text(angle = 90)
+        ) #+
+  #scale_x_discrete(limits = c("J8xD13", "J8xP5", "J8xJ2", "J8xJ3", "J8xD1", "J8xD6"))
+survival_sym_plot
+```
+
+```{r}
+#plot survival
+survival_plot<- survival %>%
+  ggplot(aes(x=reorder(Family, desc(mean)), y=mean, shape=Treatment, group= reorder(Treatment, desc(mean))))+
+  #geom_hline(yintercept=filter(survival_combined, Population.location=="Central x Central")$mean, color='gray', lty='dashed')+
+#  geom_hline(yintercept=0, color='black', size = 0.5)+
+  geom_pointrange(aes(ymin=mean-se, ymax=mean+se, color=Temp), position=position_dodge(width=0.8))+
+#  geom_text(aes(label=crosstype2, y=-0.5), size=3, fontface = "bold", angle=90, position=position_dodge(width=0.8), vjust=0.5, hjust=1) +
+  scale_y_continuous(limits=c(50,100), breaks=seq(50,100,10), labels = scalesize)+
+  scale_color_manual(values=pal[c(1,5)]) +
+  facet_wrap(~Treatment) +
+  scale_shape_manual(values=c(15, 19, 17, 18)) +
+  labs(x='Family', y="Survival (%)")+
+  theme_Publication() +
+  theme(legend.key.height = unit(0.3, "cm"),
+        legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(0,0,0,0),
+        plot.margin = margin(rep(0.5,4)),
+        legend.position="right",
+        legend.direction = "vertical",
+        axis.text.x = element_text(angle = 90),
+        axis.text.y = element_text(angle = 90)
+        ) +
+  scale_x_discrete(limits = c("J8xD13", "J8xP5", "J8xJ2", "J8xJ3", "J8xD1", "J8xD6"))
+survival_plot
+```
+
+```{r}
+#plot size
+size_plot<- size %>%
+  ggplot(aes(x=reorder(Family, desc(mean)), y=mean, shape=Treatment, group= reorder(Treatment, desc(mean))))+
+  #geom_hline(yintercept=filter(size_combined, Population.location=="Central x Central")$mean, color='gray', lty='dashed')+
+#  geom_hline(yintercept=0, color='black', size = 0.5)+
+  geom_pointrange(aes(ymin=mean-se, ymax=mean+se, color=Temp), position=position_dodge(width=0.8))+
+#  geom_text(aes(label=crosstype2, y=-0.5), size=3, fontface = "bold", angle=90, position=position_dodge(width=0.8), vjust=0.5, hjust=1) +
+  #scale_y_continuous(limits=c(50,100), breaks=seq(50,100,10), labels = scalesize)+
+  scale_color_manual(values=pal[c(1,5)]) +
+  facet_wrap(~Treatment) +
+  scale_shape_manual(values=c(15, 19, 17, 18)) +
+  labs(x='Family', y="Final size (mm^2)")+
+  theme_Publication() +
+  theme(legend.key.height = unit(0.3, "cm"),
+        legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(0,0,0,0),
+        plot.margin = margin(rep(0.5,4)),
+        legend.position="right",
+        legend.direction = "vertical",
+        axis.text.x = element_text(angle = 90),
+        axis.text.y = element_text(angle = 90)
+        ) +
+  scale_x_discrete(limits = c("J8xD13", "J8xP5", "J8xJ2", "J8xJ3", "J8xD1", "J8xD6"))
+size_plot
+```
+
+```{r}
+#plot growth
+growth_plot<- growth %>%
+  ggplot(aes(x=reorder(Family, desc(mean)), y=mean, shape=Treatment, group= reorder(Treatment, desc(mean))))+
+  #geom_hline(yintercept=filter(growth_combined, Population.location=="Central x Central")$mean, color='gray', lty='dashed')+
+#  geom_hline(yintercept=0, color='black', growth = 0.5)+
+  geom_pointrange(aes(ymin=mean-se, ymax=mean+se, color=Temp), position=position_dodge(width=0.8))+
+#  geom_text(aes(label=crosstype2, y=-0.5), growth=3, fontface = "bold", angle=90, position=position_dodge(width=0.8), vjust=0.5, hjust=1) +
+  #scale_y_continuous(limits=c(50,100), breaks=seq(50,100,10), labels = scalegrowth)+
+  scale_color_manual(values=pal[c(1,5)]) +
+  facet_wrap(~Treatment) +
+  scale_shape_manual(values=c(15, 19, 17, 18)) +
+  labs(x='Family', y="growth (%)")+
+  theme_Publication() +
+  theme(legend.key.height = unit(0.3, "cm"),
+        legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(0,0,0,0),
+        plot.margin = margin(rep(0.5,4)),
+        legend.position="right",
+        legend.direction = "vertical",
+        axis.text.x = element_text(angle = 90),
+        axis.text.y = element_text(angle = 90)
+        ) +
+  scale_x_discrete(limits = c("J8xD13", "J8xP5", "J8xJ2", "J8xJ3", "J8xD1", "J8xD6"))
+growth_plot
+```
+
+```{r}
+#plot colour
+col_plot<- col %>%
+  ggplot(aes(x=reorder(Family, desc(mean)), y=mean, shape=Treatment, group= reorder(Treatment, desc(mean))))+
+  #geom_hline(yintercept=filter(col_combined, Population.location=="Central x Central")$mean, color='gray', lty='dashed')+
+#  geom_hline(yintercept=0, color='black', col = 0.5)+
+  geom_pointrange(aes(ymin=mean-se, ymax=mean+se, color=Temp), position=position_dodge(width=0.8))+
+#  geom_text(aes(label=crosstype2, y=-0.5), col=3, fontface = "bold", angle=90, position=position_dodge(width=0.8), vjust=0.5, hjust=1) +
+  #scale_y_continuous(limits=c(50,100), breaks=seq(50,100,10), labels = scalecol)+
+  scale_color_manual(values=pal[c(1,5)]) +
+  facet_wrap(~Treatment) +
+  scale_shape_manual(values=c(15, 19, 17, 18)) +
+  labs(x='Family', y="Final colour (%)")+
+  theme_Publication() +
+  theme(legend.key.height = unit(0.3, "cm"),
+        legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(0,0,0,0),
+        plot.margin = margin(rep(0.5,4)),
+        legend.position="right",
+        legend.direction = "vertical",
+        axis.text.x = element_text(angle = 90),
+        axis.text.y = element_text(angle = 90)
+        ) +
+  scale_x_discrete(limits = c("J8xD13", "J8xP5", "J8xJ2", "J8xJ3", "J8xD1", "J8xD6"))
+col_plot
+```
+
+```{r}
+#plot colour change
+col_change_plot<- col.change %>%
+  ggplot(aes(x=reorder(Family, desc(mean)), y=mean, shape=Treatment, group= reorder(Treatment, desc(mean))))+
+  #geom_hline(yintercept=filter(col_combined, Population.location=="Central x Central")$mean, color='gray', lty='dashed')+
+#  geom_hline(yintercept=0, color='black', col = 0.5)+
+  geom_pointrange(aes(ymin=mean-se, ymax=mean+se, color=Temp), position=position_dodge(width=0.8))+
+#  geom_text(aes(label=crosstype2, y=-0.5), col=3, fontface = "bold", angle=90, position=position_dodge(width=0.8), vjust=0.5, hjust=1) +
+  #scale_y_continuous(limits=c(50,100), breaks=seq(50,100,10), labels = scalecol)+
+  scale_color_manual(values=pal[c(1,5)]) +
+  facet_wrap(~Treatment) +
+  scale_shape_manual(values=c(15, 19, 17, 18)) +
+  labs(x='Family', y="Colour change (%)")+
+  theme_Publication() +
+  theme(legend.key.height = unit(0.3, "cm"),
+        legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(0,0,0,0),
+        plot.margin = margin(rep(0.5,4)),
+        legend.position="right",
+        legend.direction = "vertical",
+        axis.text.x = element_text(angle = 90),
+        axis.text.y = element_text(angle = 90)
+        ) +
+  scale_x_discrete(limits = c("J8xD13", "J8xP5", "J8xJ2", "J8xJ3", "J8xD1", "J8xD6"))
+col_change_plot
+```
+
+```{r}
+#plot colour change
+yii_plot<- yii %>%
+  ggplot(aes(x=reorder(Family, desc(mean)), y=mean, shape=Treatment, group= reorder(Treatment, desc(mean))))+
+  #geom_hline(yintercept=filter(col_combined, Population.location=="Central x Central")$mean, color='gray', lty='dashed')+
+#  geom_hline(yintercept=0, color='black', col = 0.5)+
+  geom_pointrange(aes(ymin=mean-se, ymax=mean+se, color=Temp), position=position_dodge(width=0.8))+
+#  geom_text(aes(label=crosstype2, y=-0.5), col=3, fontface = "bold", angle=90, position=position_dodge(width=0.8), vjust=0.5, hjust=1) +
+  #scale_y_continuous(limits=c(50,100), breaks=seq(50,100,10), labels = scalecol)+
+  scale_color_manual(values=pal[c(1,5)]) +
+  facet_wrap(~Treatment) +
+  scale_shape_manual(values=c(15, 19, 17, 18)) +
+  labs(x='Family', y="Final YII (%)")+
+  theme_Publication() +
+  theme(legend.key.height = unit(0.3, "cm"),
+        legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(0,0,0,0),
+        plot.margin = margin(rep(0.5,4)),
+        legend.position="right",
+        legend.direction = "vertical",
+        axis.text.x = element_text(angle = 90),
+        axis.text.y = element_text(angle = 90)
+        ) +
+  scale_x_discrete(limits = c("J8xD13", "J8xP5", "J8xJ2", "J8xJ3", "J8xD1", "J8xD6"))
+yii_plot
+```
+
+
+```{r}
+#plot colour change
+yii_change_plot<- yii.change %>%
+  ggplot(aes(x=reorder(Family, desc(mean)), y=mean, shape=Treatment, group= reorder(Treatment, desc(mean))))+
+  #geom_hline(yintercept=filter(col_combined, Population.location=="Central x Central")$mean, color='gray', lty='dashed')+
+#  geom_hline(yintercept=0, color='black', col = 0.5)+
+  geom_pointrange(aes(ymin=mean-se, ymax=mean+se, color=Temp), position=position_dodge(width=0.8))+
+#  geom_text(aes(label=crosstype2, y=-0.5), col=3, fontface = "bold", angle=90, position=position_dodge(width=0.8), vjust=0.5, hjust=1) +
+  #scale_y_continuous(limits=c(50,100), breaks=seq(50,100,10), labels = scalecol)+
+  scale_color_manual(values=pal[c(1,5)]) +
+  facet_wrap(~Treatment) +
+  scale_shape_manual(values=c(15, 19, 17, 18)) +
+  labs(x='Family', y="YII change (%)")+
+  theme_Publication() +
+  theme(legend.key.height = unit(0.3, "cm"),
+        legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(0,0,0,0),
+        plot.margin = margin(rep(0.5,4)),
+        legend.position="right",
+        legend.direction = "vertical",
+        axis.text.x = element_text(angle = 90),
+        axis.text.y = element_text(angle = 90)
+        ) +
+  scale_x_discrete(limits = c("J8xD13", "J8xP5", "J8xJ2", "J8xJ3", "J8xD1", "J8xD6"))
+yii_change_plot
+```
+
+
+```{r, warning=FALSE}
+library(patchwork)
+(survival_plot) / (size_plot) / (col_plot) / (yii_change_plot) +  plot_layout(guides = 'collect')
+
+plot<- survival_plot + size_plot + col_plot + yii_change_plot +  plot_layout(ncol = 2, guides = 'collect') + plot_annotation(tag_levels = 'A')
+quartz()
+plot
+```
+
+```{r}
+ggsave("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Figures/physiology/juvenile_physiology.pdf", plot,
+       device="pdf", width=20, height=20, units = "cm")
+```
+

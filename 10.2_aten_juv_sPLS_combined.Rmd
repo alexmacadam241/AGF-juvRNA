@@ -1,0 +1,445 @@
+---
+title: "10.2_aten_juv_sPLS_combined"
+output: html_document
+date: "2024-08-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(limma)
+library(Glimma)
+library(edgeR)
+library(tidyverse)
+library(mixOmics) # import the mixOmics library
+set.seed(5249) # for reproducibility, remove for normal use
+```
+
+#############
+Host
+Sample info
+```{r}
+coldata<- read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/read_info/aten_juvenile_read_info2.csv", row.names="ID") |> filter(Symbiont == "D1")
+coldata <- coldata[,c("Cross","Temp","Symbiont","group")]
+#convert columns to factors
+coldata$Cross <- factor(coldata$Cross)
+coldata$group <- factor(coldata$group)
+coldata$Temp <- factor(coldata$Temp)
+coldata$Symbiont <- factor(coldata$Symbiont)
+
+#make sample lists for each symbiont treatment
+coldata2<- coldata |> rownames_to_column(var = "Samples")
+D1samples<- coldata2 |> dplyr::filter(Symbiont == "D1")
+D1samples<- D1samples$Samples
+```
+
+Get Count Data
+```{r}
+x<- as.matrix(read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/count_tables/Juvenile_host/all/aten_juveniles_host_all_counts2.csv", row.names = 1))
+#view data
+#head(x,2)
+rownames
+rownames(coldata) <- sub("fb","", rownames(coldata))
+#Do row names in coldata data match to column data in x
+all(rownames(coldata) %in% colnames(x))
+#are they in the same order?
+all(rownames(coldata) == colnames(x))
+#change order
+x <- x[, rownames(coldata)]
+#double check order
+all(rownames(coldata) == colnames(x))
+```
+
+```{r}
+#Create the matrix
+x <- DGEList(counts = x)
+
+# Assuming `sample_info` has a column named `group` for conditions
+x$samples$group <- coldata$group
+
+class(x)
+
+dim(x)
+```
+
+```{r}
+samplenames <- substring(colnames(x), 1, nchar(colnames(x)))
+samplenames
+
+colnames(x) <- samplenames
+group <- as.factor(c("AmbientD1", "AmbientD1", "AmbientD1", "AmbientD1", "AmbientD1", "HotD1", "AmbientD1", "AmbientD1", "HotD1", "AmbientD1", "AmbientD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "HotD1", "AmbientD1", "AmbientD1", "AmbientD1", "HotD1", "AmbientD1", "HotD1", "HotD1"))
+x$samples$group <- group
+```
+
+```{r}
+geneid <- rownames(x)
+```
+
+####
+Data pre-processing
+
+###
+Transformations from the raw-scale
+```{r}
+cpm <- cpm(x)
+lcpm <- cpm(x, log=TRUE)
+```
+
+```{r}
+L <- mean(x$samples$lib.size) * 1e-6
+M <- median(x$samples$lib.size) * 1e-6
+c(L, M)
+summary(lcpm)
+```
+
+###
+Removing genes that are lowly expressed
+```{r}
+table(rowSums(x$counts==0)==9)
+
+keep.exprs <- filterByExpr(x, group=group)
+x <- x[keep.exprs,, keep.lib.sizes=FALSE]
+dim(x)
+```
+
+```{r}
+lcpm.cutoff <- log2(10/M + 2/L)
+library(RColorBrewer)
+nsamples <- ncol(x)
+col <- brewer.pal(nsamples, "Paired")
+par(mfrow=c(1,2))
+plot(density(lcpm[,1]), col=col[1], lwd=2, ylim=c(0,0.26), las=2, main="", xlab="")
+title(main="A. Raw data", xlab="Log-cpm")
+abline(v=lcpm.cutoff, lty=3)
+for (i in 2:nsamples){
+den <- density(lcpm[,i])
+lines(den$x, den$y, col=col[i], lwd=2)
+}
+legend("topright", samplenames, text.col=col, bty="n")
+lcpm <- cpm(x, log=TRUE)
+plot(density(lcpm[,1]), col=col[1], lwd=2, ylim=c(0,0.26), las=2, main="", xlab="")
+title(main="B. Filtered data", xlab="Log-cpm")
+abline(v=lcpm.cutoff, lty=3)
+for (i in 2:nsamples){
+den <- density(lcpm[,i])
+lines(den$x, den$y, col=col[i], lwd=2)
+}
+legend("topright", samplenames, text.col=col, bty="n")
+```
+
+###
+Normalising gene expression distributions
+```{r}
+x <- calcNormFactors(x, method = "TMM")
+x$samples$norm.factors
+x<- data.matrix(x)
+x<- DESeq2::varianceStabilizingTransformation(x)
+x<- t(x)
+```
+
+```{r}
+y<-group
+summary(y) # check the distribution of class labels
+```
+
+```{r}
+x_D1<- x
+y_d1<- y
+```
+
+##################
+Symbionts
+Get Count Data
+```{r}
+x<- as.matrix(read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/count_tables/Juvenile_symbiont/aten_juveniles_symb_Dtre_counts.csv", row.names = 1))
+#x<- as.matrix(read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/count_tables/Juvenile_symbiont/aten_#juveniles_symb_Dtre_counts(outlier_filtered).csv", row.names = 1))
+#view data
+head(x,2)
+rownames
+rownames(coldata) <- sub("fb","", rownames(coldata))
+#Do row names in coldata data match to column data in x
+all(rownames(coldata) %in% colnames(x))
+#are they in the same order?
+all(rownames(coldata) == colnames(x))
+#change order
+x <- x[, rownames(coldata)]
+#double check order
+all(rownames(coldata) == colnames(x))
+```
+
+```{r}
+#Create the matrix
+x <- DGEList(counts = x)
+
+# Assuming `sample_info` has a column named `group` for conditions
+x$samples$group <- coldata$group
+x$samples$Cross <- coldata$Cross
+
+class(x)
+
+dim(x)
+```
+
+```{r}
+samplenames <- substring(colnames(x), 1, nchar(colnames(x)))
+samplenames
+
+colnames(x) <- samplenames
+group <- as.factor(c("AmbientD1", "AmbientD1", "AmbientD1", "AmbientD1", "AmbientD1", "HotD1", "AmbientD1", "AmbientD1", "HotD1", "AmbientD1", "AmbientD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "HotD1", "AmbientD1", "AmbientD1", "AmbientD1", "HotD1", "AmbientD1", "HotD1", "HotD1"))
+#group <- as.factor(c("AmbientD1", "AmbientD1", "AmbientD1", "AmbientD1", "AmbientD1", "HotD1", "AmbientD1", "AmbientD1", #"HotD1", "AmbientD1", "AmbientD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "AmbientD1", #"HotD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "HotD1", "AmbientD1", #"AmbientD1", "AmbientD1", "HotD1", "AmbientD1", "HotD1"))
+x$samples$group <- group
+
+Cross <- as.factor(c("J8xJ2","J8xJ2","J8xD6","J8xJ3","J8xD13","J8xD13","J8xD13","J8xJ3","J8xJ3","J8xD13","J8xD6","J8xJ2","J8xD1","J8xD6","J8xJ2","J8xD1","J8xJ3","J8xD13","J8xD1","J8xD6","J8xJ2","J8xD1","J8xD6","J8xJ3","J8xD1","J8xJ2","J8xD6","J8xJ3","J8xD13","J8xD1","J8xP5","J8xP5","J8xP5","J8xP5","J8xP5","J8xP5"))
+x$samples$Cross <- Cross
+```
+
+```{r}
+geneid <- rownames(x)
+```
+
+####
+Data pre-processing
+
+###
+Transformations from the raw-scale
+```{r}
+cpm <- cpm(x)
+lcpm <- cpm(x, log=TRUE)
+```
+
+```{r}
+L <- mean(x$samples$lib.size) * 1e-6
+M <- median(x$samples$lib.size) * 1e-6
+c(L, M)
+summary(lcpm)
+```
+
+###
+Removing genes that are lowly expressed
+```{r}
+table(rowSums(x$counts==0)==9)
+
+keep.exprs <- filterByExpr(x, group=group)
+x <- x[keep.exprs,, keep.lib.sizes=FALSE]
+dim(x)
+```
+
+```{r}
+lcpm.cutoff <- log2(10/M + 2/L)
+library(RColorBrewer)
+nsamples <- ncol(x)
+col <- brewer.pal(nsamples, "Paired")
+par(mfrow=c(1,2))
+plot(density(lcpm[,1]), col=col[1], lwd=2, ylim=c(0,0.26), las=2, main="", xlab="")
+title(main="A. Raw data", xlab="Log-cpm")
+abline(v=lcpm.cutoff, lty=3)
+for (i in 2:nsamples){
+den <- density(lcpm[,i])
+lines(den$x, den$y, col=col[i], lwd=2)
+}
+legend("topright", samplenames, text.col=col, bty="n")
+lcpm <- cpm(x, log=TRUE)
+plot(density(lcpm[,1]), col=col[1], lwd=2, ylim=c(0,0.26), las=2, main="", xlab="")
+title(main="B. Filtered data", xlab="Log-cpm")
+abline(v=lcpm.cutoff, lty=3)
+for (i in 2:nsamples){
+den <- density(lcpm[,i])
+lines(den$x, den$y, col=col[i], lwd=2)
+}
+legend("topright", samplenames, text.col=col, bty="n")
+```
+
+###
+Normalising gene expression distributions
+```{r}
+x <- calcNormFactors(x, method = "TMM")
+x$samples$norm.factors
+x<- data.matrix(x)
+x<- DESeq2::varianceStabilizingTransformation(x)
+x<- t(x)
+```
+
+```{r}
+y<-group
+summary(y) # check the distribution of class labels
+```
+
+```{r}
+x_Dtre<- x
+y_Dtre<- y
+```
+
+###############
+Preliminary Analysis with PCA
+```{r}
+pca.gene <- pca(x_D1, ncomp = 10, center = TRUE, scale = TRUE)
+pca.clinic <- pca(x_Dtre, ncomp = 10, center = TRUE, scale = TRUE)
+
+plot(pca.gene)
+plot(pca.clinic)
+```
+
+```{r}
+plotIndiv(pca.gene, comp = c(1, 2), 
+          group = y, 
+          ind.names = y, 
+          legend = TRUE, 
+          title = 'Liver gene, PCA comp 1 - 2')
+
+plotIndiv(pca.clinic, comp = c(1, 2), 
+          group = y, 
+          ind.names = y, 
+          legend = TRUE, title = 'Liver clinic, PCA comp 1 - 2')
+```
+
+Initial sPLS model
+```{r}
+spls.liver <- spls(X = x_D1, Y = x_Dtre, ncomp = 6, mode = 'regression')
+
+#saveRDS(spls.liver, file = "/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Scripts/Codes for RNAseq analysis/10.2_aten_host_mixomics1.rds")
+spls.liver<- readRDS("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Scripts/Codes for RNAseq analysis/10.2_aten_host_mixomics1.rds")
+```
+
+Tuning sPLS
+```{r}
+# repeated CV tuning of component count
+perf.spls.liver <- perf(spls.liver, validation = 'Mfold',
+                        folds = 3, nrepeat = 50,
+                        progressBar = TRUE)
+
+#saveRDS(perf.spls.liver, file = "/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Scripts/Codes for RNAseq analysis/10.2_aten_host_mixomics2.rds")
+perf.spls.liver<- readRDS("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Scripts/Codes for RNAseq analysis/10.2_aten_host_mixomics2.rds")
+
+plot(perf.spls.liver, criterion = 'Q2.total')
+```
+
+
+Selecting the number of variables
+```{r}
+# set range of test values for number of variables to use from X dataframe
+list.keepX <- c(seq(20, 50, 5))
+# set range of test values for number of variables to use from Y dataframe
+list.keepY <- c(3:10) 
+
+
+tune.spls.liver <- tune.spls(x_D1, x_Dtre, ncomp = 2,
+                              test.keepX = list.keepX,
+                              test.keepY = list.keepY,
+                              nrepeat = 1, folds = 10, # use 10 folds
+                              mode = 'regression', measure = 'cor') 
+
+#saveRDS(tune.spls.liver, file = "/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Scripts/Codes for RNAseq analysis/10.2_aten_host_mixomics3.rds")
+tune.spls.liver<- readRDS("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Scripts/Codes for RNAseq analysis/10.2_aten_host_mixomics3.rds")
+
+plot(tune.spls.liver)         # use the correlation measure for tuning
+```
+
+```{r}
+tune.spls.liver$choice.keepX
+```
+
+```{r}
+tune.spls.liver$choice.keepY
+```
+
+```{r}
+# extract optimal number of variables for X dataframe
+optimal.keepX <- tune.spls.liver$choice.keepX 
+
+# extract optimal number of variables for Y datafram
+optimal.keepY <- tune.spls.liver$choice.keepY
+
+optimal.ncomp <-  length(optimal.keepX) # extract optimal number of components
+```
+
+Final Model
+```{r}
+# use all tuned values from above
+final.spls.liver <- spls(X, Y, ncomp = optimal.ncomp, 
+                    keepX = optimal.keepX,
+                    keepY = optimal.keepY,
+                    mode = "regression") # explanitory approach being used, 
+                                         # hence use regression mode
+```
+
+Plots
+```{r}
+plotIndiv(final.spls.liver, ind.names = FALSE, 
+         rep.space = "X-variate", # plot in X-variate subspace
+         group = liver.toxicity$treatment$Time.Group, # colour by time group
+         pch = as.factor(liver.toxicity$treatment$Dose.Group), 
+         col.per.group = color.mixo(1:4), 
+         legend = TRUE, legend.title = 'Time', legend.title.pch = 'Dose')
+
+plotIndiv(final.spls.liver, ind.names = FALSE,
+         rep.space = "Y-variate", # plot in Y-variate subspace
+         group = liver.toxicity$treatment$Time.Group, # colour by time group
+         pch = as.factor(liver.toxicity$treatment$Dose.Group), 
+         col.per.group = color.mixo(1:4), 
+         legend = TRUE, legend.title = 'Time', legend.title.pch = 'Dose')
+```
+
+```{r}
+plotIndiv(final.spls.liver, ind.names = FALSE, 
+         rep.space = "XY-variate", # plot in averaged subspace
+         group = liver.toxicity$treatment$Time.Group, # colour by time group
+         pch = as.factor(liver.toxicity$treatment$Dose.Group), # select symbol
+         col.per.group = color.mixo(1:4),                      # by dose group
+         legend = TRUE, legend.title = 'Time', legend.title.pch = 'Dose')
+```
+
+```{r}
+col.tox <- color.mixo(as.numeric(as.factor(liver.toxicity$treatment[, 4]))) # create set of colours
+plotIndiv(final.spls.liver, ind.names = FALSE, 
+          rep.space = "XY-variate", # plot in averaged subspace
+          axes.box = "both", col = col.tox, style = '3d')
+```
+
+```{r}
+plotArrow(final.spls.liver, ind.names = FALSE,
+          group = liver.toxicity$treatment$Time.Group, # colour by time group
+          col.per.group = color.mixo(1:4),
+          legend.title = 'Time.Group')
+```
+
+```{r}
+# form new perf() object which utilises the final model
+perf.spls.liver <- perf(final.spls.liver, 
+                          folds = 5, nrepeat = 10, # use repeated cross-validation
+                          validation = "Mfold", 
+                          dist = "max.dist",  # use max.dist measure
+                          progressBar = FALSE)
+
+# plot the stability of each feature for the first two components, 
+# 'h' type refers to histogram
+par(mfrow=c(1,2)) 
+plot(perf.spls.liver$features$stability.X[[1]], type = 'h',
+     ylab = 'Stability',
+     xlab = 'Features',
+     main = '(a) Comp 1', las =2,
+     xlim = c(0, 150))
+plot(perf.spls.liver$features$stability.X$comp2, type = 'h',
+     ylab = 'Stability',
+     xlab = 'Features',
+     main = '(b) Comp 2', las =2,
+     xlim = c(0, 300))
+```
+
+```{r}
+plotVar(final.spls.liver, cex = c(3,4), var.names = c(FALSE, TRUE))
+```
+
+```{r}
+color.edge <- color.GreenRed(50)  # set the colours of the connecting lines
+
+# X11() # To open a new window for Rstudio
+network(final.spls.liver, comp = 1:2,
+        cutoff = 0.7, # only show connections with a correlation above 0.7
+        shape.node = c("rectangle", "circle"),
+        color.node = c("cyan", "pink"),
+        color.edge = color.edge,
+        save = 'png', # save as a png to the current working directory
+        name.save = 'sPLS Liver Toxicity Case Study Network Plot')
+```

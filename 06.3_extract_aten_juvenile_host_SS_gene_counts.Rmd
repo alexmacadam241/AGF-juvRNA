@@ -1,0 +1,242 @@
+---
+title: "6.3_extract_aten_juvenile_host_SS_gene_counts"
+output: html_document
+date: "2024-04-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+#set working directory
+setwd("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA")
+```
+
+```{r}
+#load count data
+#SS
+Juveniles_SS_Plate1_B3_S17_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate1_B3_S17_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate1_C10_S70_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate1_C10_S70_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate1_E8_S56_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate1_E8_S56_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate1_F10_S72_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate1_F10_S72_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate1_F11_S80_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate1_F11_S80_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate1_F7_S51_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate1_F7_S51_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate1_G3_S21_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate1_G3_S21_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate1_H10_S74_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate1_H10_S74_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate1_H3_S22_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate1_H3_S22_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate1_H7_S52_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate1_H7_S52_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_A10_S159_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_A10_S159_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_A8_S143_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_A8_S143_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_A9_S151_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_A9_S151_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_B1_S91_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_B1_S91_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_B4_S112_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_B4_S112_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_C1_S92_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_C1_S92_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_C4_S113_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_C4_S113_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_D2_S100_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_D2_S100_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_D6_S130_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_D6_S130_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_D8_S146_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_D8_S146_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_E10_S163_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_E10_S163_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_E4_S115_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_E4_S115_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_F7_S140_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_F7_S140_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_G1_S96_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_G1_S96_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_G7_S141_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_G7_S141_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_G9_S157_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_G9_S157_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_H3_S110_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_H3_S110_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate2_H8_S150_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate2_H8_S150_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate3_B8_S240_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate3_B8_S240_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate3_C7_S233_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate3_C7_S233_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate3_D4_S210_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate3_D4_S210_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+Juveniles_SS_Plate3_H2_S198_aten<-read.table("/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/aten_juveniles/host/SS/Plate3_H2_S198_aten_juveniles_ReadsPerGene.out.tab", sep="\t", header=FALSE)
+```
+
+```{r}
+input_data_frames1<- c("Juveniles_SS_Plate1_B3_S17_aten",
+"Juveniles_SS_Plate1_C10_S70_aten",
+"Juveniles_SS_Plate1_E8_S56_aten",
+"Juveniles_SS_Plate1_F10_S72_aten",
+"Juveniles_SS_Plate1_F11_S80_aten",
+"Juveniles_SS_Plate1_F7_S51_aten",
+"Juveniles_SS_Plate1_G3_S21_aten",
+"Juveniles_SS_Plate1_H10_S74_aten",
+"Juveniles_SS_Plate1_H3_S22_aten",
+"Juveniles_SS_Plate1_H7_S52_aten",
+"Juveniles_SS_Plate2_A10_S159_aten",
+"Juveniles_SS_Plate2_A8_S143_aten",
+"Juveniles_SS_Plate2_A9_S151_aten",
+"Juveniles_SS_Plate2_B1_S91_aten",
+"Juveniles_SS_Plate2_B4_S112_aten",
+"Juveniles_SS_Plate2_C1_S92_aten",
+"Juveniles_SS_Plate2_C4_S113_aten",
+"Juveniles_SS_Plate2_D2_S100_aten",
+"Juveniles_SS_Plate2_D6_S130_aten",
+"Juveniles_SS_Plate2_D8_S146_aten",
+"Juveniles_SS_Plate2_E10_S163_aten",
+"Juveniles_SS_Plate2_E4_S115_aten",
+"Juveniles_SS_Plate2_F7_S140_aten",
+"Juveniles_SS_Plate2_G1_S96_aten",
+"Juveniles_SS_Plate2_G7_S141_aten",
+"Juveniles_SS_Plate2_G9_S157_aten",
+"Juveniles_SS_Plate2_H3_S110_aten",
+"Juveniles_SS_Plate2_H8_S150_aten",
+"Juveniles_SS_Plate3_B8_S240_aten",
+"Juveniles_SS_Plate3_C7_S233_aten",
+"Juveniles_SS_Plate3_D4_S210_aten",
+"Juveniles_SS_Plate3_H2_S198_aten")
+```
+
+```{r}
+input_data_frames2<- c("Juveniles_SS_Plate1_B3_S17_aten_2",
+"Juveniles_SS_Plate1_C10_S70_aten_2",
+"Juveniles_SS_Plate1_E8_S56_aten_2",
+"Juveniles_SS_Plate1_F10_S72_aten_2",
+"Juveniles_SS_Plate1_F11_S80_aten_2",
+"Juveniles_SS_Plate1_F7_S51_aten_2",
+"Juveniles_SS_Plate1_G3_S21_aten_2",
+"Juveniles_SS_Plate1_H10_S74_aten_2",
+"Juveniles_SS_Plate1_H3_S22_aten_2",
+"Juveniles_SS_Plate1_H7_S52_aten_2",
+"Juveniles_SS_Plate2_A10_S159_aten_2",
+"Juveniles_SS_Plate2_A8_S143_aten_2",
+"Juveniles_SS_Plate2_A9_S151_aten_2",
+"Juveniles_SS_Plate2_B1_S91_aten_2",
+"Juveniles_SS_Plate2_B4_S112_aten_2",
+"Juveniles_SS_Plate2_C1_S92_aten_2",
+"Juveniles_SS_Plate2_C4_S113_aten_2",
+"Juveniles_SS_Plate2_D2_S100_aten_2",
+"Juveniles_SS_Plate2_D6_S130_aten_2",
+"Juveniles_SS_Plate2_D8_S146_aten_2",
+"Juveniles_SS_Plate2_E10_S163_aten_2",
+"Juveniles_SS_Plate2_E4_S115_aten_2",
+"Juveniles_SS_Plate2_F7_S140_aten_2",
+"Juveniles_SS_Plate2_G1_S96_aten_2",
+"Juveniles_SS_Plate2_G7_S141_aten_2",
+"Juveniles_SS_Plate2_G9_S157_aten_2",
+"Juveniles_SS_Plate2_H3_S110_aten_2",
+"Juveniles_SS_Plate2_H8_S150_aten_2",
+"Juveniles_SS_Plate3_B8_S240_aten_2",
+"Juveniles_SS_Plate3_C7_S233_aten_2",
+"Juveniles_SS_Plate3_D4_S210_aten_2",
+"Juveniles_SS_Plate3_H2_S198_aten_2")
+```
+
+```{r}
+# Loop through each input data frame
+for (df_name in input_data_frames1) {
+  # Create the new data frame by removing rows 1 to 4 from the original data frame
+  new_df_name <- paste0(df_name, "_2")  # Construct the new data frame name
+  assign(new_df_name, get(df_name)[-c(1, 2, 3, 4), , drop = FALSE])
+}
+```
+
+```{r}
+#save gene names
+genes<-Juveniles_SS_Plate1_B3_S17_aten |>
+  select(V1)
+
+genes<- genes |> rename(genes = V1)
+
+genes<-  genes[-c(1, 2, 3, 4),]
+```
+
+```{r}
+rm("Juveniles_SS_Plate1_B3_S17_aten",
+"Juveniles_SS_Plate1_C10_S70_aten",
+"Juveniles_SS_Plate1_E8_S56_aten",
+"Juveniles_SS_Plate1_F10_S72_aten",
+"Juveniles_SS_Plate1_F11_S80_aten",
+"Juveniles_SS_Plate1_F7_S51_aten",
+"Juveniles_SS_Plate1_G3_S21_aten",
+"Juveniles_SS_Plate1_H10_S74_aten",
+"Juveniles_SS_Plate1_H3_S22_aten",
+"Juveniles_SS_Plate1_H7_S52_aten",
+"Juveniles_SS_Plate2_A10_S159_aten",
+"Juveniles_SS_Plate2_A8_S143_aten",
+"Juveniles_SS_Plate2_A9_S151_aten",
+"Juveniles_SS_Plate2_B1_S91_aten",
+"Juveniles_SS_Plate2_B4_S112_aten",
+"Juveniles_SS_Plate2_C1_S92_aten",
+"Juveniles_SS_Plate2_C4_S113_aten",
+"Juveniles_SS_Plate2_D2_S100_aten",
+"Juveniles_SS_Plate2_D6_S130_aten",
+"Juveniles_SS_Plate2_D8_S146_aten",
+"Juveniles_SS_Plate2_E10_S163_aten",
+"Juveniles_SS_Plate2_E4_S115_aten",
+"Juveniles_SS_Plate2_F7_S140_aten",
+"Juveniles_SS_Plate2_G1_S96_aten",
+"Juveniles_SS_Plate2_G7_S141_aten",
+"Juveniles_SS_Plate2_G9_S157_aten",
+"Juveniles_SS_Plate2_H3_S110_aten",
+"Juveniles_SS_Plate2_H8_S150_aten",
+"Juveniles_SS_Plate3_B8_S240_aten",
+"Juveniles_SS_Plate3_C7_S233_aten",
+"Juveniles_SS_Plate3_D4_S210_aten",
+"Juveniles_SS_Plate3_H2_S198_aten")
+```
+
+```{r}
+# Loop through each input data frame
+for (df_name in input_data_frames2) {
+  # Select only column V2 in each data frame
+  assign(df_name, get(df_name) %>%
+           select(V2))
+}
+```
+
+```{r}
+# Loop through each input data frame
+for (df_name in input_data_frames2) {
+  # Extract column name from the data frame name
+  col_name <- gsub("_\\d+$", "", df_name)  # Remove the trailing "_2" from the data frame name
+  
+  # Rename column V2 to the data frame name in each data frame
+  assign(df_name, get(df_name) %>%
+           rename(!!col_name := V2))
+}
+```
+
+```{r}
+#bind sample counts together
+count_table <- genes |>
+cbind(Juveniles_SS_Plate1_B3_S17_aten_2) |>
+cbind(Juveniles_SS_Plate1_C10_S70_aten_2) |>
+cbind(Juveniles_SS_Plate1_E8_S56_aten_2) |>
+cbind(Juveniles_SS_Plate1_F10_S72_aten_2) |>
+cbind(Juveniles_SS_Plate1_F11_S80_aten_2) |>
+cbind(Juveniles_SS_Plate1_F7_S51_aten_2) |>
+cbind(Juveniles_SS_Plate1_G3_S21_aten_2) |>
+cbind(Juveniles_SS_Plate1_H10_S74_aten_2) |>
+cbind(Juveniles_SS_Plate1_H3_S22_aten_2) |>
+cbind(Juveniles_SS_Plate1_H7_S52_aten_2) |>
+cbind(Juveniles_SS_Plate2_A10_S159_aten_2) |>
+cbind(Juveniles_SS_Plate2_A8_S143_aten_2) |>
+cbind(Juveniles_SS_Plate2_A9_S151_aten_2) |>
+cbind(Juveniles_SS_Plate2_B1_S91_aten_2) |>
+cbind(Juveniles_SS_Plate2_B4_S112_aten_2) |>
+cbind(Juveniles_SS_Plate2_C1_S92_aten_2) |>
+cbind(Juveniles_SS_Plate2_C4_S113_aten_2) |>
+cbind(Juveniles_SS_Plate2_D2_S100_aten_2) |>
+cbind(Juveniles_SS_Plate2_D6_S130_aten_2) |>
+cbind(Juveniles_SS_Plate2_D8_S146_aten_2) |>
+cbind(Juveniles_SS_Plate2_E10_S163_aten_2) |>
+cbind(Juveniles_SS_Plate2_E4_S115_aten_2) |>
+cbind(Juveniles_SS_Plate2_F7_S140_aten_2) |>
+cbind(Juveniles_SS_Plate2_G1_S96_aten_2) |>
+cbind(Juveniles_SS_Plate2_G7_S141_aten_2) |>
+cbind(Juveniles_SS_Plate2_G9_S157_aten_2) |>
+cbind(Juveniles_SS_Plate2_H3_S110_aten_2) |>
+cbind(Juveniles_SS_Plate2_H8_S150_aten_2) |>
+cbind(Juveniles_SS_Plate3_B8_S240_aten_2) |>
+cbind(Juveniles_SS_Plate3_C7_S233_aten_2) |>
+cbind(Juveniles_SS_Plate3_D4_S210_aten_2) |>
+cbind(Juveniles_SS_Plate3_H2_S198_aten_2)
+```
+
+```{r}
+#write out count table
+write_tsv(count_table, "/Users/alexmacadam/Library/CloudStorage/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/count_tables/aten_juveniles_host_SS_counts.tsv")
+```

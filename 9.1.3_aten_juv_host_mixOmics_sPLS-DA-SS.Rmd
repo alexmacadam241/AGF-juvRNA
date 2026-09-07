@@ -1,0 +1,367 @@
+---
+title: "9.1.3_aten_juv_host_mixOmics_sPLS-DA-SS"
+output: html_document
+date: "2024-08-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(limma)
+library(Glimma)
+library(edgeR)
+library(tidyverse)
+library(mixOmics) # import the mixOmics library
+set.seed(5249) # for reproducibility, remove for normal use
+```
+
+Sample info
+```{r}
+coldata<- read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/read_info/aten_juvenile_read_info2.csv", row.names="ID")
+coldata <- coldata[,c("Cross","Temp","Symbiont","group")]
+#convert columns to factors
+coldata$Cross <- factor(coldata$Cross)
+coldata$group <- factor(coldata$group)
+coldata$Temp <- factor(coldata$Temp)
+coldata$Symbiont <- factor(coldata$Symbiont)
+
+#filter coldata
+coldata <- coldata |> filter(Symbiont == "SS")
+
+#make sample lists for each symbiont treatment
+coldata2<- coldata |> rownames_to_column(var = "Samples")
+D1samples<- coldata2 |> dplyr::filter(Symbiont == "D1")
+SSsamples<- coldata2 |> dplyr::filter(Symbiont == "SS")
+Wildsamples<-  coldata2 |> dplyr::filter(Symbiont == "Wild")
+D1samples<- D1samples$Samples
+SSsamples<- SSsamples$Samples
+Wildsamples<- Wildsamples$Samples
+```
+
+Get Count Data
+```{r}
+x<- as.matrix(read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/count_tables/Juvenile_host/all/aten_juveniles_host_all_counts2.csv", row.names = 1))
+
+# Subset to include only columns containing "_SS_"
+x <- x[, grep("_SS_", colnames(x))]
+
+#view data
+#head(x,2)
+rownames
+rownames(coldata) <- sub("fb","", rownames(coldata))
+#Do row names in coldata data match to column data in x
+all(rownames(coldata) %in% colnames(x))
+#are they in the same order?
+all(rownames(coldata) == colnames(x))
+#change order
+x <- x[, rownames(coldata)]
+#double check order
+all(rownames(coldata) == colnames(x))
+```
+
+```{r}
+#Create the matrix
+x <- DGEList(counts = x)
+
+# Assuming `sample_info` has a column named `group` for conditions
+x$samples$group <- coldata$group
+
+class(x)
+
+dim(x)
+```
+
+```{r}
+samplenames <- substring(colnames(x), 1, nchar(colnames(x)))
+samplenames
+
+group <- as.factor(c("AmbientSS","HotSS","HotSS","AmbientSS","AmbientSS","HotSS","AmbientSS","AmbientSS","AmbientSS","AmbientSS","HotSS","AmbientSS","HotSS","AmbientSS","AmbientSS","HotSS","HotSS","HotSS","AmbientSS","AmbientSS","HotSS","AmbientSS","HotSS","AmbientSS","HotSS","HotSS","AmbientSS","AmbientSS","HotSS","HotSS","AmbientSS","AmbientSS"))
+x$samples$group <- group
+
+Cross <- as.factor(c("J8xJ3","J8xJ2","J8xJ2","J8xJ2","J8xD6","J8xJ2","J8xJ3","J8xD1","J8xJ2","J8xJ2","J8xJ3","J8xD13","J8xD13","J8xJ3","J8xD1","J8xD13","J8xD1","J8xD1","J8xD6","J8xD6","J8xD13","J8xD13","J8xD6","J8xD6","J8xJ3","J8xD6","J8xD1","J8xD13","J8xP5","J8xP5","J8xP5","J8xP5"))
+x$samples$Cross <- Cross
+```
+
+```{r}
+geneid <- rownames(x)
+```
+
+####
+Data pre-processing
+
+###
+Transformations from the raw-scale
+```{r}
+cpm <- cpm(x)
+lcpm <- cpm(x, log=TRUE)
+```
+
+```{r}
+L <- mean(x$samples$lib.size) * 1e-6
+M <- median(x$samples$lib.size) * 1e-6
+c(L, M)
+summary(lcpm)
+```
+
+###
+Removing genes that are lowly expressed
+```{r}
+table(rowSums(x$counts==0)==9)
+
+keep.exprs <- filterByExpr(x, group=group)
+x <- x[keep.exprs,, keep.lib.sizes=FALSE]
+dim(x)
+```
+
+```{r}
+lcpm.cutoff <- log2(10/M + 2/L)
+library(RColorBrewer)
+nsamples <- ncol(x)
+col <- brewer.pal(nsamples, "Paired")
+par(mfrow=c(1,2))
+plot(density(lcpm[,1]), col=col[1], lwd=2, ylim=c(0,0.26), las=2, main="", xlab="")
+title(main="A. Raw data", xlab="Log-cpm")
+abline(v=lcpm.cutoff, lty=3)
+for (i in 2:nsamples){
+den <- density(lcpm[,i])
+lines(den$x, den$y, col=col[i], lwd=2)
+}
+legend("topright", samplenames, text.col=col, bty="n")
+lcpm <- cpm(x, log=TRUE)
+plot(density(lcpm[,1]), col=col[1], lwd=2, ylim=c(0,0.26), las=2, main="", xlab="")
+title(main="B. Filtered data", xlab="Log-cpm")
+abline(v=lcpm.cutoff, lty=3)
+for (i in 2:nsamples){
+den <- density(lcpm[,i])
+lines(den$x, den$y, col=col[i], lwd=2)
+}
+legend("topright", samplenames, text.col=col, bty="n")
+```
+
+###
+Normalising gene expression distributions
+```{r}
+x <- calcNormFactors(x, method = "TMM")
+x$samples$norm.factors
+x<- data.matrix(x)
+x<- DESeq2::varianceStabilizingTransformation(x)
+x<- t(x)
+```
+
+```{r}
+y<-group
+summary(y) # check the distribution of class labels
+```
+
+Initial PCA
+```{r}
+# run pca method on data
+pca.srbct = pca(x, ncomp = 10, center = TRUE, scale = TRUE) 
+plot(pca.srbct)  # barplot of the eigenvalues (explained variance per component)
+```
+
+PCA plot
+```{r}
+plotIndiv(pca.srbct, group = y, ind.names = FALSE, # plot the samples projected
+          legend = TRUE, title = 'PCA, comp 1 - 2') # onto the PCA subspace
+```
+
+Initial sPLS-DA model
+```{r}
+srbct.splsda <- splsda(x, y, ncomp = 10)  # set ncomp to 10 for performance assessment later
+```
+
+```{r}
+# plot the samples projected onto the first two components of the PLS-DA subspace
+plotIndiv(srbct.splsda , comp = 1:2, 
+          group = y, ind.names = FALSE,  # colour points by class
+          ellipse = TRUE, # include 95% confidence ellipse for each class
+          legend = TRUE, title = '(a) PLSDA with confidence ellipses')
+
+# use the max.dist measure to form decision boundaries between classes based on PLS-DA data
+background = background.predict(srbct.splsda, comp.predicted=2, dist = "max.dist")
+
+# plot the samples projected onto the first two components of the PLS-DA subspace
+plotIndiv(srbct.splsda, comp = 1:2,
+          group = y, ind.names = FALSE, # colour points by class
+          background = background, # include prediction background for each class
+          legend = TRUE, title = " (b) PLSDA with prediction background")
+
+```
+
+Tuning sPLS-DA
+Selecting the number of components
+```{r}
+# undergo performance evaluation in order to tune the number of components to use
+#perf.splsda.srbct <- perf(srbct.splsda, validation = "Mfold", 
+#                          folds = 5, nrepeat = 100, # use repeated cross-validation
+#                          progressBar = TRUE, auc = TRUE) # include AUC values
+
+#saveRDS(perf.splsda.srbct, file = "/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Scripts/Codes for RNAseq analysis/9.1.3_aten_host_mixomics_SS.rds")
+perf.splsda.srbct<- readRDS("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Scripts/Codes for RNAseq analysis/9.1.3_aten_host_mixomics_SS.rds")
+# plot the outcome of performance evaluation across all ten components
+plot(perf.splsda.srbct, col = color.mixo(5:7), sd = TRUE,
+     legend.position = "horizontal")
+
+```
+
+```{r}
+perf.splsda.srbct$choice.ncomp # what is the optimal value of components according to perf()
+```
+
+Selecting the number of variables
+```{r}
+# grid of possible keepX values that will be tested for each component
+list.keepX <- c(1:10,  seq(20, 300, 10))
+
+# undergo the tuning process to determine the optimal number of variables
+#tune.splsda.srbct <- tune.splsda(x, y, ncomp = 9, # calculate for first 9 components
+#                                 validation = 'Mfold',
+#                                 folds = 5, nrepeat = 100, # use repeated cross-validation
+#                                 dist = 'max.dist', # use max.dist measure
+#                                 measure = "BER", # use balanced error rate of dist measure
+#                                 test.keepX = list.keepX,
+#                                 progressBar = TRUE, cpus = 2) # allow for paralleliation to decrease runtime
+
+#saveRDS(tune.splsda.srbct, file = "/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Scripts/Codes for RNAseq analysis/9.1.3_aten_host_mixomics2_SS.rds")
+tune.splsda.srbct<- readRDS("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Scripts/Codes for RNAseq analysis/9.1.3_aten_host_mixomics2_SS.rds")
+
+plot(tune.splsda.srbct, col = color.jet(9)) # plot output of variable number tuning
+```
+
+```{r}
+tune.splsda.srbct$choice.ncomp$ncomp # what is the optimal value of components according to tune.splsda()
+```
+
+```{r}
+tune.splsda.srbct$choice.keepX # what are the optimal values of variables according to tune.splsda()
+```
+
+```{r}
+optimal.ncomp <- tune.splsda.srbct$choice.ncomp$ncomp
+optimal.keepX <- tune.splsda.srbct$choice.keepX[1:optimal.ncomp]
+```
+
+Final model
+```{r}
+# form final model with optimised values for component and variable count
+final.splsda <- splsda(x, y, 
+                       #ncomp = optimal.ncomp, 
+                       ncomp = 2, 
+                       keepX = optimal.keepX)
+```
+
+sPLS-DA sample plots
+```{r}
+plotIndiv(final.splsda, comp = c(1,2), # plot samples from final model
+          group = y, ind.names = FALSE, # colour by class label
+          ellipse = TRUE, legend = TRUE, # include 95% confidence ellipse
+          title = 'sPLS-DA, comp 1 & 2')
+```
+
+Variable plots
+```{r}
+# form new perf() object which utilises the final model
+#perf.splsda.srbct <- perf(final.splsda, 
+#                          folds = 5, nrepeat = 100, # use repeated cross-validation
+#                          validation = "Mfold", dist = "max.dist",  # use max.dist measure
+#                          progressBar = TRUE)
+
+#saveRDS(perf.splsda.srbct, file = "/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Scripts/Codes for RNAseq analysis/9.1.3_aten_host_mixomics3_SS.rds")
+perf.splsda.srbct<- readRDS("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Scripts/Codes for RNAseq analysis/9.1.3_aten_host_mixomics3_SS.rds")
+
+# plot the stability of each feature for the first three components, 'h' type refers to histogram
+par(mfrow=c(3,1))
+plot(perf.splsda.srbct$features$stable[[1]], type = 'h', 
+     ylab = 'Stability', 
+     xlab = 'Features', 
+     main = '(a) Comp 1', las =2)
+plot(perf.splsda.srbct$features$stable[[2]], type = 'h', 
+     ylab = 'Stability', 
+     xlab = 'Features', 
+     main = '(b) Comp 2', las =2)
+```
+
+```{r}
+#var.name.short <- substr(srbct$gene.name[, 2], 1, 10) # form simplified gene names
+
+plotVar(final.splsda, comp = c(1,2), 
+        #var.names = list(var.name.short), 
+        cex = 3) # generate correlation circle plot
+```
+
+Prediction
+```{r}
+train <- sample(1:nrow(x), 20) # randomly select 50 samples in training
+test <- setdiff(1:nrow(x), train) # rest is part of the test set
+
+# store matrices into training and test set:
+X.train <- x[train, ]
+X.test <- x[test,]
+Y.train <- y[train]
+Y.test <- y[test]
+```
+
+```{r}
+# train the model
+train.splsda.srbct <- splsda(X.train, Y.train, ncomp = optimal.ncomp, keepX = optimal.keepX)
+```
+
+```{r}
+# use the model on the Xtest set
+predict.splsda.srbct <- predict(train.splsda.srbct, X.test, 
+                                dist = "mahalanobis.dist")
+```
+
+```{r}
+# evaluate the prediction accuracy for the first two components
+predict.comp2 <- predict.splsda.srbct$class$mahalanobis.dist[,2]
+table(factor(predict.comp2, levels = levels(y)), Y.test)
+```
+
+```{r}
+# evaluate the prediction accuracy for the first three components
+predict.comp3 <- predict.splsda.srbct$class$mahalanobis.dist[,2]
+table(factor(predict.comp3, levels = levels(y)), Y.test)
+```
+
+Performance Plots
+```{r}
+auc.splsda = auroc(final.splsda, roc.comp = 1, print = FALSE) # AUROC for the first component
+
+auc.splsda = auroc(final.splsda, roc.comp = 3, print = FALSE) # AUROC for all three components
+```
+
+plot the bar plot using the highest value of the median to colour the bars
+```{r}
+plotLoadings(final.splsda, comp = 1, contrib = 'max', method = 'median') 
+plotLoadings(final.splsda, comp = 2, contrib = 'max', method = 'median')
+```
+
+
+```{r}
+# set the styling of the legend to be homogeneous with previous plots
+legend=list(legend = levels(y), # set of classes
+            col = unique(color.mixo(y)), # set of colours
+            title = "Treatment", # legend title
+            cex = 0.7) # legend size
+
+pdf(file = "/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Figures/Juveniles/Symbiont comparison/Amb splsda/SS_heat.pdf", width = 6, height = 6)
+# generate the CIM, using the legend and colouring rows by each sample's class
+cim <- cim(final.splsda, row.sideColors = color.mixo(y), 
+           legend = legend)
+dev.off()
+
+# a file PLS_CIM_image.jpeg will be saved to the working directory
+cim.res <- cim(final.splsda, row.sideColors = color.mixo(y), 
+           legend = legend, 
+           row.names = F, col.names = F,
+           cluster = "row",
+           save = 'jpeg', name.save = '/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Figures/Juveniles/Symbiont comparison/Amb splsda/D1_heat2.pdf')
+
+# generate the CIM, using the legend and colouring rows by each sample's class
+cim <- cim(final.splsda, row.sideColors = color.mixo(y), 
+           legend = legend)
+```

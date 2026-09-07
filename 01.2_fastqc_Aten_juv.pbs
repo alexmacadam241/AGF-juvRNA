@@ -1,0 +1,32 @@
+#!/bin/bash
+#PBS -j oe
+#PBS -m ae
+#PBS -N fastqc_aten_juv
+#PBS -M alexander.macadam@my.jcu.edu.au
+#PBS -l walltime=01:00:00
+#PBS -l select=1:ncpus=1:mem=50gb
+
+cd $PBS_O_WORKDIR
+
+#make sure you are in wd: /home/jc828813/RNAseq/
+
+# Add this to all of your scripts
+shopt -s expand_aliases
+source /etc/profile.d/modules.sh
+ 
+# Output some useful info
+echo "Job identifier is $PBS_JOBID"
+echo "Working directory is $PBS_O_WORKDIR"
+
+# Load the container we want to use
+# It is a good idea to always specify the version number 
+module load fastqc
+
+# Output that fastqc has been loaded
+echo "fastqc loaded"
+
+#run fastqc oon samples
+fastqc samples/Aten_juv_samples/raw_reads/*.fastq.gz -o qc/pretrim/Aten_juv
+
+#output that fastqc has run
+echo "fastqc finished"

@@ -1,0 +1,51 @@
+#!/bin/bash
+#PBS -j oe
+#PBS -m ae
+#PBS -N 04.5_star_cgor2_sym_index
+#PBS -M alexander.macadam@my.jcu.edu.au
+#PBS -l walltime=24:00:00
+#PBS -l select=1:ncpus=12:mem=50gb
+#PBS -o 04.5_star_cgor2_sym_index.log
+#PBS -e 04.5_star_cgor2_sym_index.err
+
+cd $PBS_O_WORKDIR
+
+# Add this to all of your scripts
+shopt -s expand_aliases
+source /etc/profile.d/modules.sh
+ 
+#Aligning reads using STAR is a two step process: 1. Create a genome index 2. Map reads to the genome
+#STAR tutorial https://hbctraining.github.io/Intro-to-rnaseq-hpc-O2/lessons/03_alignment.html STAR manual https://github.com/alexdobin/STAR/blob/master/doc/STARmanual.pdf
+#RNA=seq tutorial https://biocorecrg.github.io/RNAseq_course_2019/alnpractical.html
+
+# Setting input directory
+ROOT_INPUT=/home/jc828813/RNAseq
+
+#I create the directory where the genome indices are generated
+#mkdir -p $ROOT_INPUT/04_1_star_GenomeIndices
+#mkdir -p $ROOT_INPUT/04_1_star_GenomeIndices/cgor1_sym
+
+echo "Index directory made :)"
+
+#load module
+module load star/2.7.9a
+
+echo "star loaded successfully :)"
+
+#STAR --help for help
+#I create a genome index for Acropora tenuis host - to be used for porites
+#using gtf file created using gffread
+# I specified --genomeSAindexNbases because of the following warning: --genomeSAindexNbases 14 is too large for the genome size=552020673, which may cause seg-fault at the mapping step. Re-run genome generation with recommended --genomeSAindexNbases 13
+#--sjdbOverhang: Ideally, this length should be equal to the ReadLength-1, where ReadLength is the length of the reads. For instance, for Illumina 2x100b paired-end reads, the ideal value is 100-1=99. 
+
+#build genome index
+STAR 	--runThreadN 16 \
+	--runMode genomeGenerate \
+	--genomeDir $ROOT_INPUT/genomes/Cladocopium_genome/2_Shoguchi_etal_genome \
+	--genomeFastaFiles $ROOT_INPUT/genomes/Cladocopium_genome/2_Shoguchi_etal_genome/symC_scaffold_40.fasta \
+	--sjdbGTFfile $ROOT_INPUT/genomes/Cladocopium_genome/2_Shoguchi_etal_genome/40_symb2.gtf \
+	--genomeSAindexNbases 12 \
+	--sjdbOverhang 99 \
+	--outFileNamePrefix genome_index_cgor2_am_
+
+echo "genome referencing successful :)"

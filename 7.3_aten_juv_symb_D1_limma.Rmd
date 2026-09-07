@@ -1,0 +1,297 @@
+---
+title: "7.3_aten_juv_symb_D1_limma"
+output: html_document
+date: "2024-08-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(limma)
+library(Glimma)
+library(edgeR)
+library(tidyverse)
+```
+
+Sample info
+```{r}
+coldata<- read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/read_info/aten_juvenile_read_info2.csv", row.names="ID")
+
+#remove outlier
+#coldata <- coldata %>% filter(Sample.ID != "JA22115.J8xP5.C29.Hot.D1.T11.ID2R")
+
+coldata <- coldata[,c("Cross","Temp","Symbiont","group")]
+#convert columns to factors
+coldata$Cross <- factor(coldata$Cross)
+coldata$group <- factor(coldata$group)
+coldata$Temp <- factor(coldata$Temp)
+coldata$Symbiont <- factor(coldata$Symbiont)
+coldata<- coldata |> dplyr::filter(Symbiont == "D1")
+
+#make sample lists for each symbiont treatment
+coldata2<- coldata |> rownames_to_column(var = "Samples")
+D1samples<- coldata2 |> dplyr::filter(Symbiont == "D1")
+D1samples<- D1samples$Samples
+```
+
+Get Count Data
+```{r}
+x<- as.matrix(read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/count_tables/Juvenile_symbiont/aten_juveniles_symb_Dtre_counts.csv", row.names = 1))
+#x<- as.matrix(read.csv("/Users/alexmacadam/Dropbox/PhD/Chapter4_RNA/Data/Gene_counts/count_tables/Juvenile_symbiont/aten_#juveniles_symb_Dtre_counts(outlier_filtered).csv", row.names = 1))
+#view data
+head(x,2)
+rownames
+rownames(coldata) <- sub("fb","", rownames(coldata))
+#Do row names in coldata data match to column data in x
+all(rownames(coldata) %in% colnames(x))
+#are they in the same order?
+all(rownames(coldata) == colnames(x))
+#change order
+x <- x[, rownames(coldata)]
+#double check order
+all(rownames(coldata) == colnames(x))
+```
+
+```{r}
+#Create the matrix
+x <- DGEList(counts = x)
+
+# Assuming `sample_info` has a column named `group` for conditions
+x$samples$group <- coldata$group
+x$samples$Cross <- coldata$Cross
+
+class(x)
+
+dim(x)
+```
+
+```{r}
+samplenames <- substring(colnames(x), 1, nchar(colnames(x)))
+samplenames
+
+colnames(x) <- samplenames
+group <- as.factor(c("AmbientD1", "AmbientD1", "AmbientD1", "AmbientD1", "AmbientD1", "HotD1", "AmbientD1", "AmbientD1", "HotD1", "AmbientD1", "AmbientD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "HotD1", "AmbientD1", "AmbientD1", "AmbientD1", "HotD1", "AmbientD1", "HotD1", "HotD1"))
+#group <- as.factor(c("AmbientD1", "AmbientD1", "AmbientD1", "AmbientD1", "AmbientD1", "HotD1", "AmbientD1", "AmbientD1", #"HotD1", "AmbientD1", "AmbientD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "AmbientD1", #"HotD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "HotD1", "AmbientD1", "HotD1", "HotD1", "HotD1", "AmbientD1", #"AmbientD1", "AmbientD1", "HotD1", "AmbientD1", "HotD1"))
+x$samples$group <- group
+
+Cross <- as.factor(c("J8xJ2","J8xJ2","J8xD6","J8xJ3","J8xD13","J8xD13","J8xD13","J8xJ3","J8xJ3","J8xD13","J8xD6","J8xJ2","J8xD1","J8xD6","J8xJ2","J8xD1","J8xJ3","J8xD13","J8xD1","J8xD6","J8xJ2","J8xD1","J8xD6","J8xJ3","J8xD1","J8xJ2","J8xD6","J8xJ3","J8xD13","J8xD1","J8xP5","J8xP5","J8xP5","J8xP5","J8xP5","J8xP5"))
+x$samples$Cross <- Cross
+```
+
+```{r}
+geneid <- rownames(x)
+```
+
+####
+Data pre-processing
+
+###
+Transformations from the raw-scale
+```{r}
+cpm <- cpm(x)
+lcpm <- cpm(x, log=TRUE)
+```
+
+```{r}
+L <- mean(x$samples$lib.size) * 1e-6
+M <- median(x$samples$lib.size) * 1e-6
+c(L, M)
+summary(lcpm)
+```
+
+###
+Removing genes that are lowly expressed
+```{r}
+table(rowSums(x$counts==0)==9)
+
+keep.exprs <- filterByExpr(x, group=group)
+x <- x[keep.exprs,, keep.lib.sizes=FALSE]
+dim(x)
+```
+
+```{r}
+lcpm.cutoff <- log2(10/M + 2/L)
+library(RColorBrewer)
+nsamples <- ncol(x)
+col <- brewer.pal(nsamples, "Paired")
+par(mfrow=c(1,2))
+plot(density(lcpm[,1]), col=col[1], lwd=2, ylim=c(0,0.26), las=2, main="", xlab="")
+title(main="A. Raw data", xlab="Log-cpm")
+abline(v=lcpm.cutoff, lty=3)
+for (i in 2:nsamples){
+den <- density(lcpm[,i])
+lines(den$x, den$y, col=col[i], lwd=2)
+}
+legend("topright", samplenames, text.col=col, bty="n")
+lcpm <- cpm(x, log=TRUE)
+plot(density(lcpm[,1]), col=col[1], lwd=2, ylim=c(0,0.26), las=2, main="", xlab="")
+title(main="B. Filtered data", xlab="Log-cpm")
+abline(v=lcpm.cutoff, lty=3)
+for (i in 2:nsamples){
+den <- density(lcpm[,i])
+lines(den$x, den$y, col=col[i], lwd=2)
+}
+legend("topright", samplenames, text.col=col, bty="n")
+```
+
+###
+Normalising gene expression distributions
+```{r}
+x <- calcNormFactors(x, method = "TMM")
+x$samples$norm.factors
+```
+
+```{r}
+x2 <- x
+x2$samples$norm.factors <- 1
+x2$counts[,1] <- ceiling(x2$counts[,1]*0.05)
+x2$counts[,2] <- x2$counts[,2]*5
+```
+
+```{r}
+par(mfrow=c(1,2))
+lcpm <- cpm(x2, log=TRUE)
+boxplot(lcpm, las=2, col=col, main="")
+title(main="A. Example: Unnormalised data",ylab="Log-cpm")
+x2 <- calcNormFactors(x2)  
+x2$samples$norm.factors
+```
+
+```{r}
+lcpm <- cpm(x2, log=TRUE)
+boxplot(lcpm, las=2, col=col, main="")
+title(main="B. Example: Normalised data",ylab="Log-cpm")
+```
+
+###
+Unsupervised clustering of samples
+```{r}
+lcpm <- cpm(x, log=TRUE)
+par(mfrow=c(1,2))
+col.group <- group
+levels(col.group) <-  brewer.pal(nlevels(col.group), "Set1")
+col.group <- as.character(col.group)
+plotMDS(lcpm, labels=group, col=col.group)
+title(main="A. Sample groups")
+```
+
+####
+Differential expression analysis
+
+###
+Creating a design matrix and contrasts
+```{r}
+design <- model.matrix(~0+group+Cross)
+colnames(design) <- gsub("group", "", colnames(design))
+design
+```
+
+```{r}
+contr.matrix <- makeContrasts(
+   AmbD1vsHotD1 = AmbientD1-HotD1,
+   levels = colnames(design))
+contr.matrix
+```
+
+Removing heteroscedascity from count data
+```{r}
+par(mfrow=c(1,2))
+v <- voom(x, design, plot=TRUE)
+v
+```
+
+```{r}
+vfit <- lmFit(v, design)
+vfit <- contrasts.fit(vfit, contrasts=contr.matrix)
+efit <- eBayes(vfit)
+plotSA(efit, main="Final model: Mean-variance trend")
+```
+
+```{r}
+#summary(decideTests(efit))
+et <- decideTests(efit)
+summary(et)
+```
+
+```{r}
+#most strict filtering: log-FC that is significantly greater than 1 (equivalent to a 2-fold difference)
+#tfit <- treat(vfit, lfc=1)
+#dt <- decideTests(tfit)
+#summary(dt)
+
+#de.common <- which(dt[,1]!=0 & dt[,2]!=0)
+#length(de.common)
+
+#head(tfit$genes$SYMBOL[de.common], n=20)
+```
+
+Venn diagram of DEGs
+```{r}
+#vennDiagram(et[,1:3], circle.col=c("turquoise","darkgoldenrod1", "salmon"))
+```
+
+Heatmaps
+make gene list
+```{r}
+lcpm2<- lcpm |> as.data.frame() |> rownames_to_column(var = "Genes")
+
+#select only genes
+genes<- lcpm2 |> dplyr::select(Genes)
+```
+
+###############
+D1
+Examining individual DE genes from top to bottom
+```{r}
+AmbD1.vs.HotD1 <- topTreat(efit, coef=1, n=Inf)
+head(AmbD1.vs.HotD1)
+```
+
+Useful graphical representations of differential expression results
+```{r}
+#D1 plot
+plotMD(efit, column=1, status=et[,1], main=colnames(efit)[1], 
+       xlim=c(-8,13))
+```
+
+Heatmaps
+```{r}
+#filter lcpm2 for only samples with each symbiont
+#D1
+D1_lcpm<- lcpm2 |> dplyr::select(matches(D1samples))
+D1_lcpm<- cbind(genes, D1_lcpm)
+D1_lcpm2<- column_to_rownames(D1_lcpm, var = "Genes")
+D1_lcpm2<- data.matrix(D1_lcpm2)
+```
+
+```{r}
+#D1 heatmap
+library(gplots)
+AmbD1.vs.HotD1.2<-AmbD1.vs.HotD1 |> rownames_to_column(var = "Genes")
+AmbD1.vs.HotD1.topgenes <- AmbD1.vs.HotD1.2$Genes[1:100]
+
+#i <- which(v$genes$Genes %in% AmbD1.vs.HotD1.topgenes)
+i_D1 <- which(D1_lcpm$Genes %in% AmbD1.vs.HotD1.topgenes)
+mycol <- colorpanel(1000,"blue","white","red")
+
+#filter top 100 genes in matrix
+D1_lcpm_100<- D1_lcpm |> dplyr::filter(Genes %in% AmbD1.vs.HotD1.topgenes)
+D1_lcpm_100<- column_to_rownames(D1_lcpm_100, var = "Genes")
+D1_lcpm_100<- data.matrix(D1_lcpm_100)
+
+heatmap.2(D1_lcpm_100, 
+   scale="row",
+   #labRow=v$genes$SYMBOL[i], 
+   labCol=group,
+   labRow="none",
+   col=mycol, 
+   trace="none", 
+   density.info="none",
+   #margin=c(8,6), 
+   #lhei=c(2,10), 
+   dendrogram="column"
+   )
+```
+

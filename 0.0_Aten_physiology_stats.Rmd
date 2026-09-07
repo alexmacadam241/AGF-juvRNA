@@ -1,0 +1,1225 @@
+---
+title: "10_AGF_juvenile_Akenti_survival_statistics_ bayes"
+author: "Alex Macadam"
+date: "2023-10-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load packages
+```{r}
+set.seed(123)
+library(tidyverse) #for data wrangling
+library(car)       #for regression diagnostics
+library(broom)     #for tidy output
+library(ggfortify) #for model diagnostics
+library(sjPlot)    #for outputs
+library(knitr)     #for kable
+library(effects)   #for partial effects plots
+library(emmeans)   #for estimating marginal means
+library(MASS)      #for glm.nb
+library(MuMIn)     #for AICc
+library(brms)
+library(broom.mixed)
+library(tidybayes)
+library(bayesplot)
+library(rstanarm)
+library(cmdstanr)
+library(ggeffects)
+library(rstan)
+library(DHARMa)
+library(ggridges)
+library(easystats)
+library(patchwork)
+source('/Users/alexmacadam/Documents/GitHub/AGF-Physiology/helperFunctions.R')
+```
+
+Survival
+```{r}
+#load data
+survival <- read.csv("/Users/alexmacadam/Documents/GitHub/AGF-Physiology/data/Juvenile-survival-2020.csv", header=T, fileEncoding="UTF-8-BOM") |>
+  mutate(Family = factor(Family),
+         Species = factor(Species),
+         Temp = factor(Temp),
+         Tank = factor(Tank),
+         Timepoint = factor(Timepoint),
+         Cassette = factor(Cassette),
+         Plate.Slide = factor(Plate.Slide),
+         Treatment = factor(Treatment),
+         Cross = factor(Cross),
+         Crosstype = factor(Crosstype),
+         RegionCross = factor(RegionCross),
+         popcross = factor(popcross)
+         ) |>
+  filter(Timepoint == "6", Crosstype == "Individual Cross")
+
+survival.hot <- survival |> filter(Temp == "HOT")
+```
+
+```{r}
+fams <- c("Jewell8xDavies13", "Jewell8xPalms5", "Jewell8xJewell2", "Jewell8xJewell3", "Jewell8xDavies1", "Jewell8xDavies6")
+survival.hot.fams <- survival.hot |> dplyr::filter(Cross %in% fams)
+```
+
+```{r}
+# PERCENT SURVIVAL
+# Function for summarising survival standard error
+summarySE <- function(data=NULL, measurevar=NULL, groupvars=NULL, na.rm=FALSE,
+                      conf.interval=.95, .drop=TRUE) {
+  require(plyr)
+  
+  # New version of length which can handle NA's: if na.rm==T, don't count them
+  length2 <- function (x, na.rm=FALSE) {
+    if (na.rm==TRUE) sum(!is.na(x))
+    else       length(x)
+  }
+  
+  # This does the summary. For each group's data frame, return a vector with
+  # N, mean, and sd
+  datac <- ddply(data, groupvars, .drop=.drop,
+                 .fun = function(xx, col) {
+                   c(N    = length2(xx[[col]], na.rm=na.rm),
+                     mean = mean   (xx[[col]], na.rm=na.rm),
+                     sd   = sd     (xx[[col]], na.rm=na.rm)
+                   )
+                 },
+                 measurevar
+  )
+  
+  # Commenting this rename mean column line, as not assigning measurevar name properly
+  # # Rename the "mean" column    
+  # datac <- rename(datac, measurevar = mean)
+  
+  datac$se <- datac$sd / sqrt(datac$N)  # Calculate standard error of the mean
+  
+  # Confidence interval multiplier for standard error
+  # Calculate t-statistic for confidence interval: 
+  # e.g., if conf.interval is .95, use .975 (above/below), and use df=N-1
+  ciMult <- qt(conf.interval/2 + .5, datac$N-1)
+  datac$ci <- datac$se * ciMult
+  
+  return(datac)
+}
+```
+
+```{r}
+surv.summ <- summarySE(survival, measurevar="Survival",
+                     groupvars=c("Temp"), na.rm=TRUE)
+```
+
+# Fit the model
+form
+```{r}
+survival.form <- bf(Survival ~ Treatment + (1|Tank),
+                  family=bernoulli(link='logit'))
+```
+
+priors
+```{r fitModel2h1, results='markdown', eval=TRUE, mhidden=TRUE, cache=TRUE}
+priors <-
+    prior(normal(1, 1.7), class = 'Intercept') +
+    prior(normal(0, 1.7), class = 'b') +
+    prior(student_t(3, 0, 1.7), class = 'sd') 
+```
+
+run model
+```{r}
+survival.brm <- brm(survival.form, 
+                  data = survival.hot.fams,
+                  prior = priors,
+                  sample_prior = 'yes',
+                  iter = 5000,
+                  warmup = 2500,
+                  chains = 3, cores = 3,
+                  thin = 5,
+                  control = list(adapt_delta = 0.99, max_treedepth = 20),
+                  refresh = 0
+                  )
+```
+
+View prior and posterior
+```{r}
+survival.brm %>% SUYR_prior_and_posterior()
+```
+
+Trace plots
+```{r}
+survival.brm$fit |> stan_trace()
+```
+
+Autocorrelation
+```{r}
+survival.brm$fit |> stan_ac()
+```
+
+Rhat
+```{r}
+survival.brm$fit |> stan_rhat()
+```
+
+Effective sample size
+```{r}
+survival.brm$fit |> stan_ess()
+```
+
+Denisty overlay
+```{r}
+survival.brm |> pp_check(type = 'dens_overlay', nsamples = 250)
+```
+
+Dharma residuals
+```{r}
+survival.resids<- make_brms_dharma_res(survival.brm, integerResponse = FALSE)
+wrap_elements(~testUniformity(survival.resids)) +
+wrap_elements(~plotResiduals(survival.resids, form = factor(rep(1,nrow(survival.hot))))) +
+wrap_elements(~plotResiduals(survival.resids, quantreg = FALSE))+
+wrap_elements(~testDispersion(survival.resids))
+
+survival.resids<- make_brms_dharma_res(survival.brm, integerResponse = FALSE)
+testUniformity(survival.resids)
+plotResiduals(survival.resids, form = factor(rep(1,nrow(survival.hot))))
+plotResiduals(survival.resids, quantreg = FALSE)
+testDispersion(survival.resids)
+```
+
+Summarise model
+conditional effects
+```{r}
+survival.brm %>%
+    conditional_effects() %>%
+    plot(points = TRUE)
+```
+
+Planned contrast:
+D1 hot
+Sed hot
+SS hot
+```{r}
+cmat=cbind(
+  "D1vSS" = c(1, 0, -1),
+  "D1vSed" = c(1, -1, 0),
+  "SSvSed" = c(0, -1, 1)
+)
+```
+
+```{r}
+survival.em<- survival.brm |>
+  emmeans(~Treatment, type = 'response') |>
+  contrast(method=list(cmat)) |>
+  gather_emmeans_draws() |>
+  mutate(across(everything(), exp)) |>
+#on odds ratio scale
+  dplyr::summarise(median_hdci(.value),
+            Pl = mean(.value < 1),
+            Pg = mean(.value > 1)
+            )
+survival.em
+```
+
+#Plot
+```{r}
+surv.plot<- survival.brm %>%
+  emmeans(~Treatment) %>%
+  gather_emmeans_draws() %>%
+    ggplot() +
+  #geom_vline(xintercept = 0, linetype = "dashed") +
+  stat_slab(aes(
+    x = .value, y = Treatment,
+    fill = stat(ggdist::cut_cdf_qi(cdf,
+      .width = c(0.5, 0.8, 0.95),
+      labels = scales::percent_format()
+    ))
+  ), color = "black") +
+  scale_fill_brewer("Interval", direction = -1, na.translate = FALSE) +
+  theme_classic() +
+  labs(x = "Survival", y = "Treatment")
+surv.plot
+```
+
+######
+Size
+```{r}
+#load data
+size <- read.csv("/Users/alexmacadam/Documents/GitHub/AGF-Physiology/data/Juvenile-size-2020.csv", header=T, fileEncoding="UTF-8-BOM") |>
+  mutate(Family = factor(Family),
+         Species = factor(Species),
+         Temp = factor(Temp),
+         Tank = factor(Tank),
+         Timepoint = factor(Timepoint),
+         Timepoint2 = factor(Timepoint2),
+         Cassette = factor(Cassette),
+         Plate.Slide = factor(Plate.Slide),
+         Treatment = factor(Treatment, levels = c("D1", "SS", "Jewell")),
+         Cone = factor(Cone),
+         Cross = factor(Cross),
+         CrossType = factor(CrossType),
+         popcross = factor(popcross),
+         SINGLE.CLUMP = factor(SINGLE.CLUMP),
+         Mom = factor(Mom),
+         Dad = factor(Dad)
+         ) |>
+  filter(CrossType == "IndivCross", SINGLE.CLUMP == "S")
+
+#create individual ID
+size$IndID <- paste(size$Tank, size$Treatment, size$Cassette, size$Plate.Slide, size$MatchID,
+                        sep='_')
+
+#Add Temp x Treatment column
+size$popcrossxsym <- paste(size$Treatment, size$popcross, sep='_')
+size$popcrossxsym <- as.factor(size$popcrossxsym)
+```
+
+```{r}
+fams <- c("Jewell8xDavies13", "Jewell8xPalms5", "Jewell8xJewell2", "Jewell8xJewell3", "Jewell8xDavies1", "Jewell8xDavies6")
+size.fams <- size |> dplyr::filter(Cross %in% fams)
+```
+
+Growth data
+```{r}
+growth<- size.fams %>% filter(Timepoint2 %in% c("T0","T6")) %>% dplyr::select(Treatment, Timepoint2, Temp,  Cross, Area, IndID, popcross, Tank, Cassette, Plate.Slide, Mom, Dad) %>%
+  mutate(popcross = factor(popcross)) %>%
+  pivot_wider(names_from = Timepoint2, values_from = Area) %>%
+  tidyr::unnest() %>%
+  mutate(Growth = ((`T6` - `T0`)/`T0`)*100) |>
+  drop_na(Growth)
+
+growth$popcrossxsym <- paste(growth$Treatment, growth$popcross, sep='_')
+growth$popcrossxsym <- as.factor(growth$popcrossxsym)
+growth$symxtemp <- paste(growth$Treatment, growth$Temp, sep='_')
+growth$symxtemp <- as.factor(growth$symxtemp)
+```
+
+# Fit the model
+form
+```{r}
+growth.form <- bf(Growth ~ symxtemp + (1|Plate.Slide),
+                     family = gaussian()
+                   )
+```
+
+priors
+```{r fitModel2h1, results='markdown', eval=TRUE, hidden=TRUE, cache=TRUE}
+priors<- prior("normal(-10, 5)", class = "Intercept") +
+    prior("normal(0, 15)", class = "b") +
+    #prior("normal(0, 0.5)", class = "sd", group = "Tank") +
+    prior("normal(0, 7)", class = "sd", group = "Plate.Slide") +
+    prior(student_t(2, -5, 1), class = 'sigma') +
+    prior(cauchy(0,2.5), class = 'sd')
+```
+
+run model
+```{r}
+growth.brm2 <- brm(growth.form, 
+                  data = growth,
+                  prior = priors,
+                  sample_prior = 'yes',
+                  iter = 5000,
+                  warmup = 1000,
+                  chains = 3,
+                  thin = 5,
+                  control = list(adapt_delta = 0.99),
+                  refresh = 0
+                  )
+```
+
+View prior and posterior
+```{r}
+growth.brm2 %>% SUYR_prior_and_posterior()
+```
+
+Trace plots
+```{r}
+growth.brm2$fit |> stan_trace()
+```
+
+Autocorrelation
+```{r}
+growth.brm2$fit |> stan_ac()
+```
+
+Rhat
+```{r}
+growth.brm2$fit |> stan_rhat()
+```
+
+Effectiev sample size
+```{r}
+growth.brm2$fit |> stan_ess()
+```
+
+Density overlay
+```{r modelValidation5b, results='markdown', eval=TRUE, hidden=TRUE, fig.width=6, fig.height=4}
+growth.brm2 %>% pp_check(type = 'dens_overlay', nsamples = 250)
+```
+
+DHARMa residuals
+```{r}
+growth.resids<- make_brms_dharma_res(growth.brm2, integerResponse = FALSE)
+wrap_elements(~testUniformity(growth.resids)) +
+wrap_elements(~plotResiduals(growth.resids, form = factor(rep(1,nrow(growth))))) +
+wrap_elements(~plotResiduals(growth.resids, quantreg = FALSE))+
+wrap_elements(~testDispersion(growth.resids))
+```
+
+Summarise model
+conditional effects
+```{r}
+growth.brm2 |>
+  emmeans(~symxtemp) |>
+  as.data.frame() |>
+  ggplot(aes(y = emmean, x = symxtemp)) +
+  geom_pointrange(aes(ymin = lower.HPD, ymax = upper.HPD))
+```
+
+planned contrasts- compare situations
+                 D1 vs Sed       D1 vs SS        SS vs Sed       Central vs Hybrid       
+D1_AMB     |      0                -1/2                0                   -1/3
+D1_HOT     |     -1                -1/2                0                    1/4
+Jewell_AMB |      0              0                  1/2                 -1/3
+Jewell_HOT |      0              0                  1/2                  1/4
+SS_AMB     |      0                1/2               -1/2                 -1/3
+SS_HOT     |      1                1/2               -1/2                  1/4
+ 
+```{r}
+cmat<- cbind(
+             "D1_HOT vs Sed_HOT"=c(0, -1, 0, 1, 0, 0),
+             "D1_HOT vs SS_HOT" = c(0, -1, 0, 0, 0, 1),
+             "SS_HOT vs Sed_HOT" = c(0, 0, 0, 1, 0, -1),
+             "D1_AMB vs Sed_AMB"=c(-1, 0, 1, 0, 0, 0),
+             "D1_AMB vs SS_AMB" = c(-1, 0, 0, 0, 1, 0),
+             "SS_AMB vs Sed_AMB" = c(0, 0, 1, 0, -1, 0),
+             "D1_AMB vs D1_HOT" = c(1, -1, 0, 0, 0, 0),
+             "SS_AMB vs SS_HOT" = c(0, 0, 0, 0, 1, -1),
+             "SED_AMB vs SED_HOT" = c(0, 0, 1, -1, 0, 0),
+             "Amb vs hot" = c(-1/3, 1/3, -1/3, 1/3, -1/3, 1/3)
+             )
+```
+ 
+```{r}
+growth.brm2 |>
+  emmeans(~symxtemp) |>
+  contrast(list(symxtemp=cmat)) |>
+  gather_emmeans_draws() |>
+  dplyr::summarise(median_hdci(.value),
+            Pl = mean(.value < 0),
+            Pg = mean(.value > 0)
+            )
+```
+
+```{r}
+growth.plot<- growth.brm2 %>%
+  emmeans(~symxtemp) %>%
+  gather_emmeans_draws() %>%
+    ggplot() +
+  #geom_vline(xintercept = 0, linetype = "dashed") +
+  stat_slab(aes(
+    x = .value, y = symxtemp,
+    fill = stat(ggdist::cut_cdf_qi(cdf,
+      .width = c(0.5, 0.8, 0.95),
+      labels = scales::percent_format()
+    ))
+  ), color = "black") +
+  scale_fill_brewer("Interval", direction = -1, na.translate = FALSE) +
+  theme_classic() +
+  labs(x = "Growth", y = "Treatment")
+growth.plot
+```
+
+######
+final size
+```{r}
+final.size<- size |> filter(Timepoint == "6")
+final.size$symxtemp <- paste(final.size$Treatment, final.size$Temp, sep='_')
+final.size$symxtemp <- as.factor(final.size$symxtemp)
+```
+
+form
+```{r}
+size.form <- bf(Area ~ symxtemp + (1|Plate.Slide),
+                     family = gaussian()
+                   )
+```
+
+priors
+```{r fitModel2h1, results='markdown', eval=TRUE, hidden=TRUE, cache=TRUE}
+priors<- prior("normal(1, 0.5)", class = "Intercept") +
+    prior("normal(0, 0.25)", class = "b") +
+    #prior("normal(0, 0.5)", class = "sd", group = "Tank") +
+    prior("normal(-1, 1)", class = "sd", group = "Plate.Slide") +
+    prior(student_t(3, 0, 1), class = 'sigma') +
+    prior(cauchy(0,2.5), class = 'sd')
+```
+
+run model
+```{r}
+size.brm2 <- brm(size.form, 
+                  data = final.size,
+                  prior = priors,
+                  sample_prior = 'yes',
+                  iter = 2000,
+                  warmup = 500,
+                  chains = 3,
+                  thin = 5,
+                  control = list(adapt_delta = 0.99),
+                  refresh = 50
+                  )
+```
+
+View prior and posterior
+```{r}
+size.brm2 %>% SUYR_prior_and_posterior()
+```
+
+Trace plots
+```{r}
+size.brm2$fit |> stan_trace()
+```
+
+Autocorrelation
+```{r}
+size.brm2$fit |> stan_ac()
+```
+
+Rhat
+```{r}
+size.brm2$fit |> stan_rhat()
+```
+
+Effective sample size
+```{r}
+size.brm2$fit |> stan_ess()
+```
+
+Denisty overlay
+```{r}
+size.brm2 |> pp_check(type = 'dens_overlay', nsamples = 250)
+```
+
+Dharma residuals
+```{r}
+survival.resids<- make_brms_dharma_res(size.brm2, integerResponse = FALSE)
+wrap_elements(~testUniformity(survival.resids)) +
+wrap_elements(~plotResiduals(survival.resids, form = factor(rep(1,nrow(survival.hot))))) +
+wrap_elements(~plotResiduals(survival.resids, quantreg = FALSE))+
+wrap_elements(~testDispersion(survival.resids))
+
+survival.resids<- make_brms_dharma_res(size.brm2, integerResponse = FALSE)
+testUniformity(survival.resids)
+plotResiduals(survival.resids, form = factor(rep(1,nrow(survival.hot))))
+plotResiduals(survival.resids, quantreg = FALSE)
+testDispersion(survival.resids)
+```
+
+Summarise model
+conditional effects
+```{r partialPlot2d, results='markdown', eval=TRUE, hidden=TRUE, fig.width=8, fig.height=5}
+size.brm2 %>%
+    conditional_effects() %>%
+    plot(points = TRUE)
+```
+
+```{r}
+size.brm2 |>
+  emmeans(~ symxtemp) |>
+  gather_emmeans_draws() |>
+  dplyr::group_by(symxtemp) |>
+  dplyr::summarise(
+    median = median(.value),
+    lower = quantile(.value, 0.025),
+    upper = quantile(.value, 0.975)
+  )
+```
+
+planned contrasts- compare situations
+                 D1 vs Sed       D1 vs SS        SS vs Sed       Central vs Hybrid       
+D1_AMB     |      0                -1/2                0                   -1/3
+D1_HOT     |     -1                -1/2                0                    1/4
+Jewell_AMB |      0              0                  1/2                 -1/3
+Jewell_HOT |      0              0                  1/2                  1/4
+SS_AMB     |      0                1/2               -1/2                 -1/3
+SS_HOT     |      1                1/2               -1/2                  1/4
+ 
+```{r}
+cmat<- cbind(
+             "D1_HOT vs Sed_HOT"=c(0, -1, 0, 1, 0, 0),
+             "D1_HOT vs SS_HOT" = c(0, -1, 0, 0, 0, 1),
+             "SS_HOT vs Sed_HOT" = c(0, 0, 0, 1, 0, -1),
+             "D1_AMB vs Sed_AMB"=c(-1, 0, 1, 0, 0, 0),
+             "D1_AMB vs SS_AMB" = c(-1, 0, 0, 0, 1, 0),
+             "SS_AMB vs Sed_AMB" = c(0, 0, 1, 0, -1, 0),
+             "D1_AMB vs D1_HOT" = c(1, -1, 0, 0, 0, 0),
+             "SS_AMB vs SS_HOT" = c(0, 0, 0, 0, 1, -1),
+             "SED_AMB vs SED_HOT" = c(0, 0, 1, -1, 0, 0)
+             )
+```
+ 
+```{r}
+size.brm2 |>
+  emmeans(~symxtemp) |>
+  contrast(list(symxtemp=cmat)) |>
+  gather_emmeans_draws() |>
+  dplyr::summarise(median_hdci(.value),
+            Pl = mean(.value < 0),
+            Pg = mean(.value > 0)
+            )
+```
+
+```{r}
+size.plot<- size.brm2 %>%
+  emmeans(~symxtemp) %>%
+  gather_emmeans_draws() %>%
+    ggplot() +
+  #geom_vline(xintercept = 0, linetype = "dashed") +
+  stat_slab(aes(
+    x = .value, y = symxtemp,
+    fill = stat(ggdist::cut_cdf_qi(cdf,
+      .width = c(0.5, 0.8, 0.95),
+      labels = scales::percent_format()
+    ))
+  ), color = "black") +
+  scale_fill_brewer("Interval", direction = -1, na.translate = FALSE) +
+  theme_classic() +
+  labs(x = "Size", y = "Treatment")
+size.plot
+```
+
+##############
+Colour
+```{r readData, results='markdown', eval=TRUE}
+colour <- read.csv("/Users/alexmacadam/Documents/GitHub/AGF-Physiology/data/Juvenile-colour-2020.csv", header=T, fileEncoding="UTF-8-BOM") |>
+  mutate( Treatment = factor(Treatment),
+          Plate.Slide = factor(Plate.Slide),
+          Temp = factor(Temp),
+          popcross = factor(popcross)
+          ) |>
+  filter(IndID != "NA")
+
+colour$symxtemp <- paste(colour$Treatment, colour$Temp, sep='_')
+colour$symxtemp <- as.factor(colour$symxtemp)
+
+#colour change
+colour<- colour |>
+  mutate(T0_2 = (100-(T0 / 255)*100))
+colour<- colour |>
+  mutate(T6_2 = (100-(T6 / 255)*100))
+colour<- colour |>
+  mutate(Grey_change_2 = T6_2 - T0_2)
+```
+
+# Fit the model
+form
+```{r}
+colour.form <- bf(Grey_change_2 ~ symxtemp + (1|Plate.Slide),
+                     family = gaussian()
+                   )
+```
+
+priors
+```{r fitModel2h1, results='markdown', eval=TRUE, hidden=TRUE, cache=TRUE}
+priors<- prior("normal(-4, 6)", class = "Intercept") +
+    prior("normal(0, 8)", class = "b") +
+    #prior("normal(0, 0.5)", class = "sd", group = "Tank") +
+    prior("normal(0, 7)", class = "sd", group = "Plate.Slide") +
+    prior(student_t(3, 0, 6), class = 'sigma') +
+    prior(cauchy(0,2), class = 'sd')
+```
+
+run model
+```{r}
+colour.brm2 <- brm(colour.form, 
+                  data = colour,
+                  prior = priors,
+                  sample_prior = 'yes',
+                  iter = 5000,
+                  warmup = 1000,
+                  chains = 3,
+                  thin = 10,
+                  control = list(adapt_delta = 0.9, max_treedepth = 20),
+                  refresh = 0
+                  )
+```
+
+View prior and posterior
+```{r}
+colour.brm2 %>% SUYR_prior_and_posterior()
+```
+
+Trace plots
+```{r}
+colour.brm2$fit |> stan_trace()
+```
+
+Autocorrelation
+```{r}
+colour.brm2$fit |> stan_ac()
+```
+
+Rhat
+```{r}
+colour.brm2$fit |> stan_rhat()
+```
+
+Effective sample size
+```{r}
+colour.brm2$fit |> stan_ess()
+```
+
+Density overlay
+```{r modelValidation5b, results='markdown', eval=TRUE, hidden=TRUE, fig.width=6, fig.height=4}
+colour.brm2 %>% pp_check(type = 'dens_overlay', nsamples = 250)
+```
+
+DHARMa residuals
+```{r}
+colour.resids<- make_brms_dharma_res(colour.brm2, integerResponse = FALSE)
+wrap_elements(~testUniformity(colour.resids)) +
+wrap_elements(~plotResiduals(colour.resids, form = factor(rep(1,nrow(colour))))) +
+wrap_elements(~plotResiduals(colour.resids, quantreg = FALSE))+
+wrap_elements(~testDispersion(colour.resids))
+```
+
+Summarise model
+conditional effects
+```{r partialPlot2d, results='markdown', eval=TRUE, hidden=TRUE, fig.width=8, fig.height=5}
+colour.brm2 %>%
+    conditional_effects("symxtemp") %>%
+    plot(points = TRUE)
+```
+
+planned contrasts- compare situations
+                 D1 vs Sed       D1 vs SS        SS vs Sed       Central vs Hybrid       
+D1_AMB     |      0                -1/2                0                   -1/3
+D1_HOT     |     -1                -1/2                0                    1/4
+Jewell_AMB |      0              0                  1/2                 -1/3
+Jewell_HOT |      0              0                  1/2                  1/4
+SS_AMB     |      0                1/2               -1/2                 -1/3
+SS_HOT     |      1                1/2               -1/2                  1/4
+ 
+```{r}
+cmat<- cbind(
+             "D1_HOT vs Sed_HOT"=c(0, -1, 0, 1, 0, 0),
+             "D1_HOT vs SS_HOT" = c(0, -1, 0, 0, 0, 1),
+             "SS_HOT vs Sed_HOT" = c(0, 0, 0, 1, 0, -1),
+             "D1_AMB vs Sed_AMB"=c(-1, 0, 1, 0, 0, 0),
+             "D1_AMB vs SS_AMB" = c(-1, 0, 0, 0, 1, 0),
+             "SS_AMB vs Sed_AMB" = c(0, 0, 1, 0, -1, 0),
+             "D1_AMB vs D1_HOT" = c(1, -1, 0, 0, 0, 0),
+             "SS_AMB vs SS_HOT" = c(0, 0, 0, 0, 1, -1),
+             "SED_AMB vs SED_HOT" = c(0, 0, 1, -1, 0, 0)
+             )
+```
+
+```{r}
+colour.brm2 |>
+  emmeans(~symxtemp) |>
+  contrast(list(symxtemp=cmat)) |>
+  gather_emmeans_draws() |>
+  dplyr::summarise(median_hdci(.value),
+            Pl = mean(.value < 0),
+            Pg = mean(.value > 0)
+            )
+```
+
+```{r}
+colour.dif.plot<- colour.brm2 %>%
+  emmeans(~symxtemp) %>%
+  gather_emmeans_draws() %>%
+    ggplot() +
+  #geom_vline(xintercept = 0, linetype = "dashed") +
+  stat_slab(aes(
+    x = .value, y = symxtemp,
+    fill = stat(ggdist::cut_cdf_qi(cdf,
+      .width = c(0.5, 0.8, 0.95),
+      labels = scales::percent_format()
+    ))
+  ), color = "black") +
+  scale_fill_brewer("Interval", direction = -1, na.translate = FALSE) +
+  theme_classic() +
+  labs(x = "Change in colour", y = "Treatment")
+colour.dif.plot
+```
+
+Final Colour
+form
+```{r}
+colour.form <- bf(T6_2 ~ symxtemp + (1|Plate.Slide),
+                     family = gaussian()
+                   )
+```
+
+priors
+```{r fitModel2h1, results='markdown', eval=TRUE, hidden=TRUE, cache=TRUE}
+priors<- prior("normal(20, 20)", class = "Intercept") +
+    prior("normal(-10, 10)", class = "b") +
+    #prior("normal(0, 0.5)", class = "sd", group = "Tank") +
+    prior("normal(5, 10)", class = "sd", group = "Plate.Slide") +
+    prior(student_t(3, 0, 2), class = 'sigma') +
+    prior(cauchy(0,2.5), class = 'sd')
+```
+
+run model
+```{r}
+colour.brm3 <- brm(colour.form, 
+                  data = colour,
+                  prior = priors,
+                  sample_prior = 'yes',
+                  iter = 10000,
+                  warmup = 5000,
+                  chains = 4,
+                  thin = 20,
+                  control = list(adapt_delta = 0.99, max_treedepth = 20),
+                  refresh = 0
+                  )
+```
+
+View prior and posterior
+```{r}
+colour.brm3 %>% SUYR_prior_and_posterior()
+```
+
+trace plots
+```{r}
+colour.brm3$fit |> stan_trace()
+```
+
+Autocorrelation
+```{r}
+colour.brm3$fit |> stan_ac()
+```
+
+Rhat
+```{r}
+colour.brm3$fit |> stan_rhat()
+```
+
+Effective sample size
+```{r}
+colour.brm3$fit |> stan_ess()
+```
+
+Density overlay
+```{r modelValidation5b, results='markdown', eval=TRUE, hidden=TRUE, fig.width=6, fig.height=4}
+colour.brm3 %>% pp_check(type = 'dens_overlay', nsamples = 250)
+```
+
+DHARMa residuals
+```{r}
+colour.resids<- make_brms_dharma_res(colour.brm3, integerResponse = FALSE)
+wrap_elements(~testUniformity(colour.resids)) +
+wrap_elements(~plotResiduals(colour.resids, form = factor(rep(1,nrow(colour))))) +
+wrap_elements(~plotResiduals(colour.resids, quantreg = FALSE))+
+wrap_elements(~testDispersion(colour.resids))
+```
+
+Summarise model
+conditional effects
+```{r partialPlot2d, results='markdown', eval=TRUE, hidden=TRUE, fig.width=8, fig.height=5}
+colour.brm3 %>%
+    conditional_effects("symxtemp") %>%
+    plot(points = TRUE)
+```
+
+```{r}
+colour.brm3 |>
+  emmeans(~ symxtemp) |>
+  gather_emmeans_draws() |>
+  dplyr::group_by(symxtemp) |>
+  dplyr::summarise(
+    median = median(.value),
+    lower = quantile(.value, 0.025),
+    upper = quantile(.value, 0.975)
+  )
+```
+
+planned contrasts- compare situations
+                 D1 vs Sed       D1 vs SS        SS vs Sed       Central vs Hybrid       
+D1_AMB     |      0                -1/2                0                   -1/3
+D1_HOT     |     -1                -1/2                0                    1/4
+Jewell_AMB |      0              0                  1/2                 -1/3
+Jewell_HOT |      0              0                  1/2                  1/4
+SS_AMB     |      0                1/2               -1/2                 -1/3
+SS_HOT     |      1                1/2               -1/2                  1/4
+
+```{r}
+cmat<- cbind(
+             "D1_HOT vs Sed_HOT"=c(0, -1, 0, 1, 0, 0),
+             "D1_HOT vs SS_HOT" = c(0, -1, 0, 0, 0, 1),
+             "SS_HOT vs Sed_HOT" = c(0, 0, 0, 1, 0, -1),
+             "D1_AMB vs Sed_AMB"=c(-1, 0, 1, 0, 0, 0),
+             "D1_AMB vs SS_AMB" = c(-1, 0, 0, 0, 1, 0),
+             "SS_AMB vs Sed_AMB" = c(0, 0, 1, 0, -1, 0),
+             "D1_AMB vs D1_HOT" = c(1, -1, 0, 0, 0, 0),
+             "SS_AMB vs SS_HOT" = c(0, 0, 0, 0, 1, -1),
+             "SED_AMB vs SED_HOT" = c(0, 0, 1, -1, 0, 0)
+             )
+```
+ 
+```{r}
+colour.brm3 |>
+  emmeans(~symxtemp) |>
+  contrast(list(symxtemp=cmat)) |>
+  gather_emmeans_draws() |>
+  dplyr::summarise(median_hdci(.value),
+            Pl = mean(.value < 0),
+            Pg = mean(.value > 0)
+            )
+```
+
+plot
+```{r}
+colour.plot<- colour.brm3 %>%
+  emmeans(~symxtemp) %>%
+  gather_emmeans_draws() %>%
+    ggplot() +
+  #geom_vline(xintercept = 0, linetype = "dashed") +
+  stat_slab(aes(
+    x = .value, y = symxtemp,
+    fill = stat(ggdist::cut_cdf_qi(cdf,
+      .width = c(0.5, 0.8, 0.95),
+      labels = scales::percent_format()
+    ))
+  ), color = "black") +
+  scale_fill_brewer("Interval", direction = -1, na.translate = FALSE) +
+  theme_classic() +
+  labs(x = "Final colour", y = "Treatment")
+colour.plot
+#saveRDS(colour.plot, file = "colour.plot_A.tenuis_juv.rds")
+```
+
+########
+Read in the data
+```{r readData, results='markdown', eval=TRUE}
+yii <- read.csv("/Users/alexmacadam/Documents/GitHub/AGF-Physiology/data/Juvenile-PAM-2020.csv", header=T, fileEncoding="UTF-8-BOM") |>
+  mutate(Family = factor(Family),
+         Species = factor(Species),
+         Temp = factor(Temp),
+         Tank = factor(Tank),
+         Timepoint = factor(Timepoint),
+         Cassette = factor(Cassette),
+         Plate.Slide = factor(Plate.Slide),
+         Treatment = factor(Treatment),
+         Cone = factor(Cone),
+         Crosstype = factor(Crosstype),
+         popcross = factor(popcross),
+         SINGLE.CLUMP = factor(SINGLE.CLUMP),
+         Mom = factor(Mom),
+         Dad = factor(Dad)
+         ) |>
+  filter(Crosstype == "IndivCross", SINGLE.CLUMP == "S", Timepoint %in% c("T-2","T6"))
+
+#Add Temp x Treatment column
+yii$symxtemp <- paste(yii$Treatment, yii$Temp, sep='_')
+yii$symxtemp <- as.factor(yii$symxtemp)
+```
+
+```{r}
+#reshape data
+yii2<- yii |>
+  dplyr::select(Treatment, Timepoint, Temp,  YII_micro, IndID, popcross, Tank, Cassette, Plate.Slide, symxtemp) |>
+  mutate(popcross = factor(popcross)) |>
+  pivot_wider(names_from = Timepoint, values_from = YII_micro) |>
+  tidyr::unnest()
+
+yii2<- yii2 |>
+  mutate(YII_change = (`T6` - `T-2`)*1000) |> #times 1000 to make bigger numbers
+  drop_na(YII_change)
+
+yii2$`T-2`[yii2$`T-2`<0.001] <- 0.001
+yii2$T6[yii2$T6<0.001] <- 0.001
+
+yii2<- yii2 |>
+  mutate(YII_p_change = ((`T6` - `T-2`)/`T-2`)*100) |>
+  drop_na(YII_p_change)
+```
+
+```{r}
+#create final YII
+final_yii<- yii |>
+  filter(Timepoint == "T6") |>
+  mutate(YII_micro = YII_micro * 100)
+```
+
+form
+```{r}
+yii.form <- bf(YII_change ~ symxtemp + (1|Plate.Slide),
+                     family = gaussian()
+                   )
+```
+
+
+```{r fitModel2h1, results='markdown', eval=TRUE, hidden=TRUE, cache=TRUE}
+priors<- prior("normal(0, 200)", class = "Intercept") +
+    prior("normal(0, 200)", class = "b") +
+    #prior("normal(0, 0.5)", class = "sd", group = "Tank") +
+    prior("normal(0, 300)", class = "sd", group = "Plate.Slide") +
+    prior(student_t(3, 0, 100), class = 'sigma') +
+    prior(cauchy(0,2.5), class = 'sd')
+```
+
+```{r}
+YII.brm3 <- brm(yii.form, 
+                  data = yii2,
+                  prior = priors,
+                  sample_prior = 'yes',
+                  iter = 10000,
+                  warmup = 5000,
+                  chains = 4,
+                  thin = 20,
+                  control = list(adapt_delta = 0.99, max_treedepth = 20),
+                  refresh = 0
+                  )
+```
+
+View prior and posterior
+```{r}
+YII.brm3 %>% SUYR_prior_and_posterior()
+```
+
+Trace plots
+```{r}
+YII.brm3$fit |> stan_trace()
+```
+
+Autocorrelation
+```{r}
+YII.brm3$fit |> stan_ac()
+```
+
+Rhat
+```{r}
+YII.brm3$fit |> stan_rhat()
+```
+
+Effective sample size
+```{r}
+YII.brm3$fit |> stan_ess()
+```
+
+Density overlay
+```{r modelValidation5b, results='markdown', eval=TRUE, hidden=TRUE, fig.width=6, fig.height=4}
+YII.brm3 %>% pp_check(type = 'dens_overlay', nsamples = 250)
+```
+
+DHARMa residuals
+```{r}
+YII.resids<- make_brms_dharma_res(YII.brm3, integerResponse = FALSE)
+wrap_elements(~testUniformity(YII.resids)) +
+wrap_elements(~plotResiduals(YII.resids, form = factor(rep(1,nrow(YII))))) +
+wrap_elements(~plotResiduals(YII.resids, quantreg = FALSE))+
+wrap_elements(~testDispersion(YII.resids))
+```
+
+conditional effects
+```{r partialPlot2d, results='markdown', eval=TRUE, hidden=TRUE, fig.width=8, fig.height=5}
+YII.brm3 %>%
+    conditional_effects("symxtemp") %>%
+    plot(points = TRUE)
+```
+
+planned contrasts- compare situations
+                 D1 vs Sed       D1 vs SS        SS vs Sed       Central vs Hybrid       
+D1_AMB     |      0                -1/2                0                   -1/3
+D1_HOT     |     -1                -1/2                0                    1/4
+Jewell_AMB |      0              0                  1/2                 -1/3
+Jewell_HOT |      0              0                  1/2                  1/4
+SS_AMB     |      0                1/2               -1/2                 -1/3
+SS_HOT     |      1                1/2               -1/2                  1/4
+```{r}
+cmat<- cbind(
+             "D1_HOT vs Sed_HOT"=c(0, -1, 0, 1, 0, 0),
+             "D1_HOT vs SS_HOT" = c(0, -1, 0, 0, 0, 1),
+             "SS_HOT vs Sed_HOT" = c(0, 0, 0, 1, 0, -1),
+             "D1_AMB vs Sed_AMB"=c(-1, 0, 1, 0, 0, 0),
+             "D1_AMB vs SS_AMB" = c(-1, 0, 0, 0, 1, 0),
+             "SS_AMB vs Sed_AMB" = c(0, 0, 1, 0, -1, 0),
+             "D1_AMB vs D1_HOT" = c(1, -1, 0, 0, 0, 0),
+             "SS_AMB vs SS_HOT" = c(0, 0, 0, 0, 1, -1),
+             "SED_AMB vs SED_HOT" = c(0, 0, 1, -1, 0, 0)
+             )
+```
+
+```{r}
+YII.brm3 |>
+  emmeans(~symxtemp) |>
+  contrast(list(symxtemp=cmat)) |>
+  gather_emmeans_draws() |>
+  dplyr::summarise(median_hdci(.value),
+            Pl = mean(.value < 0),
+            Pg = mean(.value > 0)
+            )
+```
+
+```{r}
+YII.change.plot<- YII.brm3 %>%
+  emmeans(~symxtemp) %>%
+  gather_emmeans_draws() %>%
+    ggplot() +
+  #geom_vline(xintercept = 0, linetype = "dashed") +
+  stat_slab(aes(
+    x = .value, y = symxtemp,
+    fill = stat(ggdist::cut_cdf_qi(cdf,
+      .width = c(0.5, 0.8, 0.95),
+      labels = scales::percent_format()
+    ))
+  ), color = "black") +
+  scale_fill_brewer("Interval", direction = -1, na.translate = FALSE) +
+  theme_classic() +
+  labs(x = "Change in YII", y = "Treatment")
+YII.change.plot
+```
+
+#####################################################################
+Final YII
+
+form
+```{r}
+yii.form <- bf(YII_micro ~ symxtemp + (1|Plate.Slide),
+                     family = gaussian()
+                   )
+```
+
+priors
+```{r fitModel2h1, results='markdown', eval=TRUE, hidden=TRUE, cache=TRUE}
+priors<- prior("normal(10, 20)", class = "Intercept") +
+    prior("normal(0, 20)", class = "b") +
+    #prior("normal(0, 0.5)", class = "sd", group = "Tank") +
+    prior("normal(0, 20)", class = "sd", group = "Plate.Slide") +
+    prior(student_t(3, 0, 20), class = 'sigma') +
+    prior(cauchy(0,2.5), class = 'sd')
+```
+
+run model
+```{r}
+YII.brm2 <- brm(yii.form, 
+                  data = yii,
+                  prior = priors,
+                  sample_prior = 'yes',
+                  iter = 10000,
+                  warmup = 5000,
+                  chains = 4,
+                  thin = 20,
+                  control = list(adapt_delta = 0.99, max_treedepth = 20),
+                  refresh = 0
+                  )
+```
+
+View prior and posterior
+```{r}
+YII.brm2 %>% SUYR_prior_and_posterior()
+```
+
+Trace plots
+```{r}
+YII.brm2$fit |> stan_trace()
+```
+
+Autocorrelation
+```{r}
+YII.brm2$fit |> stan_ac()
+```
+
+Rhat
+```{r}
+YII.brm2$fit |> stan_rhat()
+```
+
+Effective sample size
+```{r}
+YII.brm2$fit |> stan_ess()
+```
+
+density overlay
+```{r modelValidation5b, results='markdown', eval=TRUE, hidden=TRUE, fig.width=6, fig.height=4}
+YII.brm2 %>% pp_check(type = 'dens_overlay', nsamples = 250)
+```
+
+DHARMa residuals
+```{r}
+YII.resids<- make_brms_dharma_res(YII.brm2, integerResponse = FALSE)
+wrap_elements(~testUniformity(YII.resids)) +
+wrap_elements(~plotResiduals(YII.resids, form = factor(rep(1,nrow(YII))))) +
+wrap_elements(~plotResiduals(YII.resids, quantreg = FALSE))+
+wrap_elements(~testDispersion(YII.resids))
+```
+
+Summarise model
+conditional effects
+```{r partialPlot2d, results='markdown', eval=TRUE, hidden=TRUE, fig.width=8, fig.height=5}
+YII.brm2 %>%
+    conditional_effects("symxtemp") %>%
+    plot(points = TRUE)
+```
+
+```{r}
+YII.brm2 |>
+  emmeans(~ symxtemp) |>
+  gather_emmeans_draws() |>
+  dplyr::group_by(symxtemp) |>
+  dplyr::summarise(
+    median = median(.value),
+    lower = quantile(.value, 0.025),
+    upper = quantile(.value, 0.975)
+  )
+```
+
+planned contrasts- compare situations
+                 D1 vs Sed       D1 vs SS        SS vs Sed       Central vs Hybrid       
+D1_AMB     |      0                -1/2                0                   -1/3
+D1_HOT     |     -1                -1/2                0                    1/4
+Jewell_AMB |      0              0                  1/2                 -1/3
+Jewell_HOT |      0              0                  1/2                  1/4
+SS_AMB     |      0                1/2               -1/2                 -1/3
+SS_HOT     |      1                1/2               -1/2                  1/4
+```{r}
+cmat<- cbind(
+             "D1_HOT vs Sed_HOT"=c(0, -1, 0, 1, 0, 0),
+             "D1_HOT vs SS_HOT" = c(0, -1, 0, 0, 0, 1),
+             "SS_HOT vs Sed_HOT" = c(0, 0, 0, 1, 0, -1),
+             "D1_AMB vs Sed_AMB"=c(-1, 0, 1, 0, 0, 0),
+             "D1_AMB vs SS_AMB" = c(-1, 0, 0, 0, 1, 0),
+             "SS_AMB vs Sed_AMB" = c(0, 0, 1, 0, -1, 0),
+             "D1_AMB vs D1_HOT" = c(1, -1, 0, 0, 0, 0),
+             "SS_AMB vs SS_HOT" = c(0, 0, 0, 0, 1, -1),
+             "SED_AMB vs SED_HOT" = c(0, 0, 1, -1, 0, 0)
+             )
+```
+ 
+```{r}
+YII.brm2 |>
+  emmeans(~symxtemp) |>
+  contrast(list(symxtemp=cmat)) |>
+  gather_emmeans_draws() |>
+  dplyr::summarise(median_hdci(.value),
+            Pl = mean(.value < 0),
+            Pg = mean(.value > 0)
+            )
+```
+
+```{r}
+YII.plot<- YII.brm2 %>%
+  emmeans(~symxtemp) %>%
+  gather_emmeans_draws() %>%
+    ggplot() +
+  #geom_vline(xintercept = 0, linetype = "dashed") +
+  stat_slab(aes(
+    x = .value, y = symxtemp,
+    fill = stat(ggdist::cut_cdf_qi(cdf,
+      .width = c(0.5, 0.8, 0.95),
+      labels = scales::percent_format()
+    ))
+  ), color = "black") +
+  scale_fill_brewer("Interval", direction = -1, na.translate = FALSE) +
+  theme_classic() +
+  labs(x = "Final YII", y = "Treatment")
+YII.plot
+```
+
+###
+```{r}
+surv.plot
+a<- growth.plot + size.plot + colour.dif.plot + colour.plot + YII.change.plot + YII.plot + plot_layout(ncol = 2, guides = 'collect') + plot_annotation(tag_levels = 'A')
+```
+
