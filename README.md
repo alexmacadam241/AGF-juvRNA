@@ -4,8 +4,8 @@ R code to accompany the paper
 
 ### Statistical analysis
 
-- Juvenile physiology [0.1_Aten_physiology.Rmd](0.1_Aten_physiology.Rmd)
-- Juvenile physiology stats [0.2_Aten_physiology_stats.Rmd](0.2_Aten_physiology_stats.Rmd)
+- Juvenile physiology stats [0.1_Aten_physiology_stats.Rmd](0.1_Aten_physiology_stats.Rmd)
+- Juvenile physiology plots [0.2_Aten_physiology.Rmd](0.2_Aten_physiology.Rmd)
 - FastQC [1.2_fastqc_Aten_juv.pbs](1.2_fastqc_Aten_juv.pbs)
 - Trim reads [2_trim_loop.pbs](2_trim_loop.pbs)
 - Trim reads [2_trim_loop2.pbs](2_trim_loop2.pbs)
