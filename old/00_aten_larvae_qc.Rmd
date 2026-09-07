@@ -1,0 +1,112 @@
+---
+title: "RNAeq quality control"
+output: html_document
+date: "2023-06-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Set working directory
+```{r}
+setwd("/Users/jc828813/Dropbox/PhD/Chapter 4- RNA/Chapter 4- RNA- scripts/Chapter-4--Gene-expression")
+```
+
+Load packages
+```{r}
+library(tidyverse)
+```
+
+Make a folder for the 
+```{r}
+system("mkdir -p raw_data/aten_larvae_reads")
+```
+
+Load file with sample names
+```{r}
+raw_files <- read_tsv("raw_data/aten_larvae_raw_files.tsv", col_names = c("folder","file"))
+```
+
+This creates a vector of file paths which we use later to construct URLs for downloading and paths for saving
+```{r}
+paths <- raw_files %>% 
+  filter(folder=="aten_larvae_reads") %>% 
+  unite("path",folder,file,sep="/") %>% 
+  pull(path)
+
+
+for (path in paths){
+  
+  # Construct a URL for downloading
+  url <- paste("https://s3-ap-southeast-2.amazonaws.com/bc3203/",path,sep = "")
+
+  # Construct a relative path for saving the file
+  dest <- paste("raw_data/",path,sep="")
+
+  if ( !file.exists(dest)){
+    download.file(url, destfile = dest)
+  }
+}
+```
+
+As a rough check to ensure that the files downloaded properly we could simply list the number of reads in each file.
+Here is some bash code to check an individual file:
+```{r}
+system("gunzip -c raw_data/aten_larvae_reads/Plate3_G1_S189_R2_001.fastq.gz | grep '^+$' | wc -l")
+```
+
+This bash code checks all the files. It should print the name of each file followed by a number indicating the number of reads the file contains
+```{r}
+system("
+for f in raw_data/aten_larvae_reads/*.gz;do 
+  echo $(basename $f) $(gunzip -c $f | grep '^+$' | wc -l)
+done
+")
+```
+
+Unzip the genome
+```{r}
+system("gunzip aten_final_0.11.fasta.gz")
+```
+
+save the gene info in a table
+```{r}
+gene_info <- "raw_data/aten_0.11.maker_post_001.genes.gff.gz"
+gene_info2 <- read.gff(gene_info)
+
+#how many genes are described?
+gene_info2 %>% filter(type == "gene") %>% count()
+
+#plot showing the number of genes in each chromosome
+gene_info2 %>% filter(type == "gene") %>%
+  group_by(seqid) %>%
+  summarise(num_genes = n()) %>%
+  ggplot(aes(x=seqid, y=num_genes)) +
+  geom_col() +
+  labs(x = "Chromosome", y = "Number of genes")
+
+#Make a plot showing the density of genes on chromosomes 1, 2 and 3 as a function of genomic coordinate
+gene_info2 %>% 
+  filter(type == "gene") %>%
+  filter(seqid == c("Sc0000000", "Sc0000003", "Sc0000003")) %>%
+  ggplot(aes(x=start)) +
+  geom_histogram() +
+  facet_wrap(~seqid)
+
+#Plot the distribution (frequency histogram or density plot) of gene lengths. Use a log scale for the x axis.
+gene_info2 %>%
+  filter(type == "gene") %>%
+  mutate(length = end - start) %>%
+  ggplot(aes(x=length)) +
+  geom_histogram() +
+  scale_x_log10()
+```
+
+```{r}
+system("mkdir -p rsem")
+```
+
+```{r}
+system("rsem-prepare-reference --gtf raw_data/aten_0.11.maker_post_001.genes.gff.gz --bowtie2 raw_data/aten_final_0.11.fasta rsem/aten_ref")
+```
